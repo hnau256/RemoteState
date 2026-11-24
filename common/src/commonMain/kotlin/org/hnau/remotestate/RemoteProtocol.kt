@@ -40,6 +40,12 @@ sealed interface RemoteServerMessage {
 sealed interface RemoteClientMessage {
 
     @Serializable
+    @SerialName("hello")
+    data class Hello(
+        val sessionId: SessionId,
+    ) : RemoteClientMessage
+
+    @Serializable
     @SerialName("call")
     data class Call(
         val callId: CallId,

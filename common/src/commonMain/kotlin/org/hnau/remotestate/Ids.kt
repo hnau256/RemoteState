@@ -41,3 +41,15 @@ value class CallId(
         fun new(): CallId = CallId(Uuid.random())
     }
 }
+
+@Serializable
+@JvmInline
+value class SessionId(
+    val uuid: Uuid,
+) {
+
+    companion object {
+
+        fun new(): SessionId = SessionId(Uuid.random())
+    }
+}

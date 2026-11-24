@@ -56,11 +56,23 @@ class AnonymousModel(
     )
 }
 
+data class RootSkeleton(
+    var logged: Boolean = false,
+)
+
 class RootModel(
     scope: CoroutineScope,
+    private val skeleton: RootSkeleton,
 ) {
 
-    private val logged: MutableStateFlow<Boolean> = false.toMutableStateFlowAsInitial()
+    private val logged: MutableStateFlow<Boolean> = skeleton.logged.toMutableStateFlowAsInitial()
+
+    private fun setLogged(
+        newLogged: Boolean,
+    ) {
+        skeleton.logged = newLogged
+        logged.value = newLogged
+    }
 
     val state: RootState = RootState(
         loginState = logged
@@ -69,13 +81,13 @@ class RootModel(
                     ifTrue = {
                         LoggedModel(
                             scope = scope,
-                            logout = { logged.value = false },
+                            logout = { setLogged(false) },
                         ).state.right()
                     },
                     ifFalse = {
                         AnonymousModel(
                             login = { _, password ->
-                                (password == "password").also { logged.value = it }
+                                (password == "password").also(::setLogged)
                             },
                         ).state.left()
                     },
@@ -84,4 +96,3 @@ class RootModel(
             .toRemoteState(),
     )
 }
-

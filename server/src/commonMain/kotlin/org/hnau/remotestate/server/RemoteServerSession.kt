@@ -81,6 +81,7 @@ internal class RemoteServerSession(
     ) {
         when (message) {
             is RemoteClientMessage.Call -> handleCall(message)
+            is RemoteClientMessage.Hello -> onError(IllegalStateException("Unexpected hello"))
         }
     }
 
