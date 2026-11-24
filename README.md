@@ -169,8 +169,8 @@ Messages are JSON over a WebSocket at `/remote`.
 Client to server:
 
 ```json
-{"type": "hello", "sessionId": "…"}
-{"type": "call", "callId": "…", "function": "<FunctionId>", "argument": …}
+{"type": "hello", "sessionId": "5f0c6a9e-8d3b-4c1a-9f2e-7b6d4e3a2c10"}
+{"type": "call", "callId": 3, "function": 17, "argument": "Buy milk"}
 ```
 
 `hello` must be the first message. Otherwise the server closes the socket with `VIOLATED_POLICY`.
@@ -178,14 +178,16 @@ Client to server:
 Server to client:
 
 ```json
-{"type": "update", "stateId": "<StateId>", "value": …}
-{"type": "call_result", "callId": "…", "result": {"right": …}}
-{"type": "call_result", "callId": "…", "result": {"left": "outdated"}}
+{"type": "update", "stateId": 2, "value": [{"title": "Buy milk", "remove": 18}]}
+{"type": "call_result", "callId": 3, "result": {"right": {}}}
+{"type": "call_result", "callId": 4, "result": {"left": "outdated"}}
 ```
 
-The root is delivered as an `update` with `StateId.root` (the nil UUID). A call result and the update
-it causes are not ordered relative to each other. Wait for the expected state rather than reading it
-right after a call.
+State, function and call ids are per-connection counters, so they are plain JSON numbers. Only
+`SessionId` is a UUID string. The root is delivered as an `update` with `StateId.root` (`0`).
+
+A call result and the update it causes are not ordered relative to each other. Wait for the expected
+state rather than reading it right after a call.
 
 ## Notes and limitations
 

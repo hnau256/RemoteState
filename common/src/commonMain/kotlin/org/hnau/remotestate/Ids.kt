@@ -6,39 +6,39 @@ import kotlin.uuid.Uuid
 
 @Serializable
 @JvmInline
-value class StateId(
-    val uuid: Uuid,
+value class StateId private constructor(
+    private val id: Long,
 ) {
 
     companion object {
 
-        val root: StateId = StateId(Uuid.NIL)
+        val root: StateId = StateId(0)
 
-        fun new(): StateId = StateId(Uuid.random())
+        fun createFactory(): IdFactory<StateId> = IdFactory(::StateId)
     }
 }
 
 @Serializable
 @JvmInline
-value class FunctionId(
-    val uuid: Uuid,
+value class FunctionId private constructor(
+    private val id: Long,
 ) {
 
     companion object {
 
-        fun new(): FunctionId = FunctionId(Uuid.random())
+        fun createFactory(): IdFactory<FunctionId> = IdFactory(::FunctionId)
     }
 }
 
 @Serializable
 @JvmInline
-value class CallId(
-    val uuid: Uuid,
+value class CallId private constructor(
+    private val id: Long,
 ) {
 
     companion object {
 
-        fun new(): CallId = CallId(Uuid.random())
+        fun createFactory(): IdFactory<CallId> = IdFactory(::CallId)
     }
 }
 

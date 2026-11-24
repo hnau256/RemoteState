@@ -15,6 +15,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.modules.SerializersModule
 import org.hnau.remotestate.CallError
 import org.hnau.remotestate.FunctionId
+import org.hnau.remotestate.IdFactory
 import org.hnau.remotestate.RemoteClientMessage
 import org.hnau.remotestate.RemoteFunction
 import org.hnau.remotestate.RemoteFunctionDescriptor
@@ -52,6 +53,10 @@ internal class RemoteServerSession(
     private val functions: MutableMap<FunctionId, suspend (JsonElement) -> JsonElement> = HashMap()
 
     private var currentOwner: Owner? = null
+
+    private val stateIdFactory: IdFactory<StateId> = StateId.createFactory()
+
+    private val functionIdFactory: IdFactory<FunctionId> = FunctionId.createFactory()
 
     private val json: Json = Json(RemoteJson) {
         serializersModule = SerializersModule {
@@ -156,7 +161,7 @@ internal class RemoteServerSession(
         initialValue: T,
     ): Subscription {
         val subscription = Subscription(
-            id = StateId.new(),
+            id = stateIdFactory.next(),
             children = Owner(),
         )
         owner().subscriptions += subscription
@@ -222,7 +227,7 @@ internal class RemoteServerSession(
             encoder: Encoder,
             value: RemoteFunction<A, R>,
         ) {
-            val id = FunctionId.new()
+            val id = functionIdFactory.next()
             functions[id] = { argument ->
                 json.encodeToJsonElement(
                     serializer = resultSerializer,

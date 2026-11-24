@@ -17,6 +17,7 @@ import org.hnau.remotestate.RemoteJson
 import org.hnau.remotestate.CallError
 import org.hnau.remotestate.CallId
 import org.hnau.remotestate.FunctionId
+import org.hnau.remotestate.IdFactory
 import org.hnau.remotestate.RemoteClientMessage
 import org.hnau.remotestate.RemoteFunction
 import org.hnau.remotestate.RemoteFunctionDescriptor
@@ -95,6 +96,8 @@ internal class RemoteClientSession<T>(
 
     private var closedCause: Throwable? = null
 
+    private val callIdFactory: IdFactory<CallId> = CallId.createFactory()
+
     private val json: Json = Json(RemoteJson) {
         serializersModule = SerializersModule {
             contextual(RemoteState::class) { typeArguments ->
@@ -151,7 +154,7 @@ internal class RemoteClientSession<T>(
         function: FunctionId,
         argument: JsonElement,
     ): JsonElement {
-        val callId = CallId.new()
+        val callId = callIdFactory.next()
         val deferred = CompletableDeferred<JsonElement>()
         callsMutex.withLock {
             closedCause?.let { throw it }
