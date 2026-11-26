@@ -1,6 +1,6 @@
 @file:OptIn(ExperimentalSerializationApi::class)
 
-package org.hnau.remotestate.client
+package org.hnau.remotestate
 
 import kotlinx.serialization.DeserializationStrategy
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -14,26 +14,17 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.modules.SerializersModule
-import org.hnau.remotestate.RemoteFunction
-import org.hnau.remotestate.RemoteFunctionSerializer
-import org.hnau.remotestate.RemoteJson
-import org.hnau.remotestate.RemotePath
-import org.hnau.remotestate.RemotePathSegment
-import org.hnau.remotestate.RemoteState
-import org.hnau.remotestate.RemoteStateSerializer
 
 internal interface RemoteTreeDecodeContext {
 
-    fun <T> decodeState(
-        path: RemotePath,
-        serializer: RemoteStateSerializer<T>,
+    fun decodeState(
+        patcher: RemoteStatePatcher<*, *, *>,
         element: JsonElement,
-    ): RemoteState<T>
+    ): RemoteState<*>
 
-    fun <A, R> decodeFunction(
-        path: RemotePath,
-        serializer: RemoteFunctionSerializer<A, R>,
-    ): RemoteFunction<A, R>
+    fun decodeFunction(
+        serializer: RemoteFunctionSerializer<*, *>,
+    ): RemoteFunction<*, *>
 }
 
 internal fun <T> RemoteTreeDecodeContext.decodeTree(
@@ -46,31 +37,22 @@ internal fun <T> RemoteTreeDecodeContext.decodeTree(
 
 private abstract class TreeDecoder(
     protected val context: RemoteTreeDecodeContext,
-    protected val insideList: Boolean,
 ) : AbstractDecoder() {
 
     override val serializersModule: SerializersModule = RemoteJson.serializersModule
 
     protected abstract val element: JsonElement
 
-    protected abstract val elementPath: RemotePath
-
-    private fun remoteElementPath(): RemotePath = elementPath.also { path ->
-        check(!insideList) { "Remote value at $path is inside a list. Use Map instead" }
-    }
-
     @Suppress("UNCHECKED_CAST")
     override fun <T> decodeSerializableValue(
         deserializer: DeserializationStrategy<T>,
     ): T = when (deserializer) {
-        is RemoteStateSerializer<*> -> context.decodeState(
-            path = remoteElementPath(),
-            serializer = deserializer,
+        is RemoteStatePatcher<*, *, *> -> context.decodeState(
+            patcher = deserializer,
             element = element,
         ) as T
 
         is RemoteFunctionSerializer<*, *> -> context.decodeFunction(
-            path = remoteElementPath(),
             serializer = deserializer,
         ) as T
 
@@ -80,7 +62,7 @@ private abstract class TreeDecoder(
     private fun content(): String = (element as? JsonPrimitive)
         ?.takeIf { it !is JsonNull }
         ?.content
-        ?: error("Expected primitive at $elementPath, got $element")
+        ?: error("Expected primitive, got $element")
 
     override fun decodeNotNullMark(): Boolean = element !is JsonNull
 
@@ -110,27 +92,25 @@ private abstract class TreeDecoder(
         enumDescriptor
             .getElementIndex(name)
             .takeIf { it != CompositeDecoder.UNKNOWN_NAME }
-            ?: error("Unknown ${enumDescriptor.serialName} value '$name' at $elementPath")
+            ?: error("Unknown ${enumDescriptor.serialName} value '$name'")
     }
 
     override fun beginStructure(
         descriptor: SerialDescriptor,
     ): CompositeDecoder = when (descriptor.kind) {
-        StructureKind.LIST -> ListDecoder(context, elementPath, expect<JsonArray>())
-        StructureKind.MAP -> MapDecoder(context, elementPath, insideList, expect<JsonObject>())
-        else -> ObjectDecoder(context, elementPath, insideList, expect<JsonObject>(), descriptor)
+        StructureKind.LIST -> ListDecoder(context, expect<JsonArray>())
+        StructureKind.MAP -> MapDecoder(context, expect<JsonObject>())
+        else -> ObjectDecoder(context, expect<JsonObject>(), descriptor)
     }
 
     private inline fun <reified E : JsonElement> expect(): E = element as? E
-        ?: error("Expected ${E::class.simpleName} at $elementPath, got $element")
+        ?: error("Expected ${E::class.simpleName}, got $element")
 }
 
 private class RootDecoder(
     context: RemoteTreeDecodeContext,
     override val element: JsonElement,
-) : TreeDecoder(context, insideList = false) {
-
-    override val elementPath: RemotePath = RemotePath.root
+) : TreeDecoder(context) {
 
     override fun decodeElementIndex(
         descriptor: SerialDescriptor,
@@ -139,11 +119,9 @@ private class RootDecoder(
 
 private class ObjectDecoder(
     context: RemoteTreeDecodeContext,
-    private val path: RemotePath,
-    insideList: Boolean,
     private val content: JsonObject,
     private val descriptor: SerialDescriptor,
-) : TreeDecoder(context, insideList) {
+) : TreeDecoder(context) {
 
     private var index: Int = -1
 
@@ -152,9 +130,6 @@ private class ObjectDecoder(
 
     override val element: JsonElement
         get() = content.getValue(name)
-
-    override val elementPath: RemotePath
-        get() = path / RemotePathSegment(name)
 
     override fun decodeElementIndex(
         descriptor: SerialDescriptor,
@@ -170,17 +145,13 @@ private class ObjectDecoder(
 
 private class ListDecoder(
     context: RemoteTreeDecodeContext,
-    private val path: RemotePath,
     private val content: JsonArray,
-) : TreeDecoder(context, insideList = true) {
+) : TreeDecoder(context) {
 
     private var index: Int = -1
 
     override val element: JsonElement
         get() = content[index]
-
-    override val elementPath: RemotePath
-        get() = path / RemotePathSegment(index.toString())
 
     override fun decodeElementIndex(
         descriptor: SerialDescriptor,
@@ -189,10 +160,8 @@ private class ListDecoder(
 
 private class MapDecoder(
     context: RemoteTreeDecodeContext,
-    private val path: RemotePath,
-    insideList: Boolean,
     content: JsonObject,
-) : TreeDecoder(context, insideList) {
+) : TreeDecoder(context) {
 
     private val entries: List<Map.Entry<String, JsonElement>> = content.entries.toList()
 
@@ -201,17 +170,8 @@ private class MapDecoder(
     private val entry: Map.Entry<String, JsonElement>
         get() = entries[position / 2]
 
-    private val decodingKey: Boolean
-        get() = position % 2 == 0
-
     override val element: JsonElement
-        get() = if (decodingKey) JsonPrimitive(entry.key) else entry.value
-
-    override val elementPath: RemotePath
-        get() {
-            check(!decodingKey) { "Map keys at $path must be primitive" }
-            return path / RemotePathSegment(entry.key)
-        }
+        get() = if (position % 2 == 0) JsonPrimitive(entry.key) else entry.value
 
     override fun decodeElementIndex(
         descriptor: SerialDescriptor,

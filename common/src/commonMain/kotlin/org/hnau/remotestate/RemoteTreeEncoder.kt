@@ -1,6 +1,6 @@
 @file:OptIn(ExperimentalSerializationApi::class)
 
-package org.hnau.remotestate.server
+package org.hnau.remotestate
 
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerializationStrategy
@@ -14,26 +14,19 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.modules.SerializersModule
-import org.hnau.remotestate.RemoteFunction
-import org.hnau.remotestate.RemoteFunctionSerializer
-import org.hnau.remotestate.RemoteJson
-import org.hnau.remotestate.RemotePath
-import org.hnau.remotestate.RemotePathSegment
-import org.hnau.remotestate.RemoteState
-import org.hnau.remotestate.RemoteStateSerializer
 
 internal interface RemoteTreeEncodeContext {
 
-    fun <T> encodeState(
+    fun encodeState(
         path: RemotePath,
-        serializer: RemoteStateSerializer<T>,
-        state: RemoteState<T>,
+        patcher: RemoteStatePatcher<*, *, *>,
+        state: RemoteState<*>,
     ): JsonElement
 
-    fun <A, R> encodeFunction(
+    fun encodeFunction(
         path: RemotePath,
-        serializer: RemoteFunctionSerializer<A, R>,
-        function: RemoteFunction<A, R>,
+        serializer: RemoteFunctionSerializer<*, *>,
+        function: RemoteFunction<*, *>,
     ): JsonElement
 }
 
@@ -51,40 +44,34 @@ internal fun <T> RemoteTreeEncodeContext.encodeTree(
 
 private abstract class TreeEncoder(
     protected val context: RemoteTreeEncodeContext,
-    protected val insideList: Boolean,
 ) : AbstractEncoder() {
 
     override val serializersModule: SerializersModule = RemoteJson.serializersModule
 
-    protected abstract val elementPath: RemotePath
+    protected abstract fun elementPath(): RemotePath
 
     protected abstract fun put(
         element: JsonElement,
     )
 
-    private fun remoteElementPath(): RemotePath = elementPath.also { path ->
-        check(!insideList) { "Remote value at $path is inside a list. Use Map instead" }
-    }
-
-    @Suppress("UNCHECKED_CAST")
     override fun <T> encodeSerializableValue(
         serializer: SerializationStrategy<T>,
         value: T,
     ) {
         when (serializer) {
-            is RemoteStateSerializer<*> -> put(
+            is RemoteStatePatcher<*, *, *> -> put(
                 context.encodeState(
-                    path = remoteElementPath(),
-                    serializer = serializer as RemoteStateSerializer<Any?>,
-                    state = value as RemoteState<Any?>,
+                    path = elementPath(),
+                    patcher = serializer,
+                    state = value as RemoteState<*>,
                 )
             )
 
             is RemoteFunctionSerializer<*, *> -> put(
                 context.encodeFunction(
-                    path = remoteElementPath(),
-                    serializer = serializer as RemoteFunctionSerializer<Any?, Any?>,
-                    function = value as RemoteFunction<Any?, Any?>,
+                    path = elementPath(),
+                    serializer = serializer,
+                    function = value as RemoteFunction<*, *>,
                 )
             )
 
@@ -120,18 +107,18 @@ private abstract class TreeEncoder(
     override fun beginStructure(
         descriptor: SerialDescriptor,
     ): CompositeEncoder = when (descriptor.kind) {
-        StructureKind.LIST -> ListEncoder(context, elementPath, ::put)
-        StructureKind.MAP -> MapEncoder(context, elementPath, insideList, ::put)
-        else -> ObjectEncoder(context, elementPath, insideList, ::put)
+        StructureKind.LIST -> ListEncoder(context, ::elementPath, ::put)
+        StructureKind.MAP -> MapEncoder(context, ::elementPath, ::put)
+        else -> ObjectEncoder(context, ::elementPath, ::put)
     }
 }
 
 private class RootEncoder(
     context: RemoteTreeEncodeContext,
     private val onResult: (JsonElement) -> Unit,
-) : TreeEncoder(context, insideList = false) {
+) : TreeEncoder(context) {
 
-    override val elementPath: RemotePath = RemotePath.root
+    override fun elementPath(): RemotePath = RemotePath.root
 
     override fun put(
         element: JsonElement,
@@ -142,19 +129,17 @@ private class RootEncoder(
 
 private class ObjectEncoder(
     context: RemoteTreeEncodeContext,
-    private val path: RemotePath,
-    insideList: Boolean,
+    private val path: () -> RemotePath,
     private val onEnd: (JsonElement) -> Unit,
-) : TreeEncoder(context, insideList) {
+) : TreeEncoder(context) {
 
     private val content: MutableMap<String, JsonElement> = LinkedHashMap()
 
     private var key: String? = null
 
-    private fun key(): String = key ?: error("No element is being encoded at $path")
+    private fun key(): String = key ?: error("No element is being encoded")
 
-    override val elementPath: RemotePath
-        get() = path / RemotePathSegment(key())
+    override fun elementPath(): RemotePath = path() / RemotePathSegment(key())
 
     override fun encodeElement(
         descriptor: SerialDescriptor,
@@ -179,14 +164,13 @@ private class ObjectEncoder(
 
 private class ListEncoder(
     context: RemoteTreeEncodeContext,
-    private val path: RemotePath,
+    private val path: () -> RemotePath,
     private val onEnd: (JsonElement) -> Unit,
-) : TreeEncoder(context, insideList = true) {
+) : TreeEncoder(context) {
 
     private val content: MutableList<JsonElement> = mutableListOf()
 
-    override val elementPath: RemotePath
-        get() = path / RemotePathSegment(content.size.toString())
+    override fun elementPath(): RemotePath = path() / RemotePathSegment(content.size.toString())
 
     override fun put(
         element: JsonElement,
@@ -203,10 +187,9 @@ private class ListEncoder(
 
 private class MapEncoder(
     context: RemoteTreeEncodeContext,
-    private val path: RemotePath,
-    insideList: Boolean,
+    private val path: () -> RemotePath,
     private val onEnd: (JsonElement) -> Unit,
-) : TreeEncoder(context, insideList) {
+) : TreeEncoder(context) {
 
     private val content: MutableMap<String, JsonElement> = LinkedHashMap()
 
@@ -214,13 +197,12 @@ private class MapEncoder(
 
     private var key: String? = null
 
-    private fun key(): String = key ?: error("No map entry is being encoded at $path")
+    private fun key(): String = key ?: error("No map entry is being encoded")
 
-    override val elementPath: RemotePath
-        get() {
-            check(!encodingKey) { "Map keys at $path must be primitive" }
-            return path / RemotePathSegment(key())
-        }
+    override fun elementPath(): RemotePath {
+        check(!encodingKey) { "Map keys must be primitive" }
+        return path() / RemotePathSegment(key())
+    }
 
     override fun encodeElement(
         descriptor: SerialDescriptor,
@@ -237,7 +219,7 @@ private class MapEncoder(
             key = (element as? JsonPrimitive)
                 ?.takeIf { it !is JsonNull }
                 ?.content
-                ?: error("Map keys at $path must be primitive")
+                ?: error("Map keys must be primitive")
         } else {
             content[key()] = element
         }

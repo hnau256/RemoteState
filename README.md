@@ -14,7 +14,7 @@ Every remote value is addressed by its path in the tree, for example `loginState
 
 | Module   | Contents                                                                                                                |
 |----------|-------------------------------------------------------------------------------------------------------------------------|
-| `common` | `RemoteState`, `RemoteFunction`, `RemotePath`, wire protocol. Depend on it from the module with your state classes.   |
+| `common` | Remote states, `RemoteFunction`, wire protocol and transport-agnostic sessions. Depend on it from the module with your state classes. |
 | `server` | `Route.remoteState(...)`: a Ktor WebSocket route that serves the state tree.                                          |
 | `client` | `HttpClient.connectRemoteState(...)`: connects, reconnects and exposes the mirrored tree as a `StateFlow`.              |
 
@@ -33,7 +33,7 @@ data class TaskState(
 
 @Serializable
 data class LoggedState(
-    val tasks: RemoteState<Map<String, TaskState>>,
+    val tasks: KeyedListRemoteState<String, TaskState>,
     val addTask: RemoteFunction<String, Unit>,
     val logout: RemoteFunction<Unit, Unit>,
 )
@@ -45,17 +45,43 @@ data class AnonymousState(
 
 @Serializable
 data class RootState(
-    val loginState: RemoteState<@Serializable(with = EitherSerializer::class) Either<AnonymousState, LoggedState>>,
+    val loginState: SnapshotRemoteState<@Serializable(with = EitherSerializer::class) Either<AnonymousState, LoggedState>>,
 )
 ```
 
-- `RemoteState<T>` wraps a `StateFlow<T>`. Every time the value changes, the whole new value is sent to the client.
+- A remote state wraps a `StateFlow<T>`. Its type says how changes are sent:
+  - `SnapshotRemoteState<T>` sends the whole new value every time;
+  - `KeyedListRemoteState<K, V>` wraps `StateFlow<List<KeyValue<K, V>>>` and sends only what changed: removed
+    keys, added and changed values, and positions of added and moved items. Moves are minimal: the items that
+    keep their relative order (the longest increasing subsequence of positions) stay in place. Items are
+    addressed by key, so keys must be unique primitives.
 - `RemoteFunction<A, R>` is a `suspend (A) -> R`. Use `Pair`/`Triple` for several arguments and `Unit` for none.
   `RemoteFunction<Unit, R>` can be called without arguments: `state.logout()`.
 - Any other field is regular serializable data.
-- `RemoteState` and `RemoteFunction` cannot be placed inside a `List`, because list indices are not stable
-  addresses. Use a `Map` with stable keys instead: the key becomes a path segment. Map keys must be
-  non-empty primitives. Lists of plain data are fine.
+- Remote states and functions can be placed anywhere: in objects, maps, lists, sealed classes and inside
+  values and patches of other remote states.
+
+### Custom states
+
+A new kind of state is a subclass of `RemoteState` with a `RemoteStatePatcher` as its serializer. The patcher
+only describes how to compute a patch and how to apply it:
+
+```kotlin
+@Serializable(with = StreamingTextRemoteState.Patcher::class)
+class StreamingTextRemoteState(state: StateFlow<String>) : RemoteState<String>(state) {
+
+    object Patcher : RemoteStatePatcher<StreamingTextRemoteState, String, TextPatch>(
+        valueSerializer = String.serializer(),
+        patchSerializer = TextPatch.serializer(),
+        diff = { old, new -> if (new.startsWith(old)) TextPatch.Append(new.removePrefix(old)) else TextPatch.Replace(new) },
+        apply = { text, patch -> patch.fold(ifAppend = { text + it }, ifReplace = { it }) },
+        create = ::StreamingTextRemoteState,
+    )
+}
+```
+
+`apply(value, diff(value, new))` must be equal to `new`. Generic states are supported as well: a patcher
+class with a constructor that takes `KSerializer`s of the type arguments, like `SnapshotRemoteState.Patcher`.
 
 ## Server
 
@@ -76,10 +102,9 @@ class LoggedModel(scope: CoroutineScope, logout: suspend () -> Unit) {
     val state = LoggedState(
         tasks = titles
             .mapListReusable(scope, extractKey = { it }) { _, title ->
-                TaskModel(title, remove = { titles.update { it - title } }).state
+                KeyValue(title, TaskModel(title, remove = { titles.update { it - title } }).state)
             }
-            .mapState(scope) { tasks -> tasks.associateBy(TaskState::title) }
-            .toRemoteState(),
+            .toKeyedListRemoteState(),
         addTask = { title -> titles.update { it + title } },
         logout = { logout() },
     )
@@ -138,7 +163,7 @@ anonymous.login("user" to "password")
 
 val logged = root.loginState.state.first { it.isRight() }.getOrNull()!!
 logged.addTask("Buy milk")
-logged.tasks.state.collect { tasks -> render(tasks.values) }
+logged.tasks.state.collect { tasks -> render(tasks.map { it.value }) }
 ```
 
 Calls throw:
@@ -150,23 +175,23 @@ Calls throw:
 
 ## How it works
 
-The server encodes the state tree into JSON with its own encoder that tracks the path of every value:
+Every remote state is a node. On the server a node watches its `StateFlow`. When the value changes, it sends
+`diff(previous, new)` to the client and then walks the new value to find the remote states and functions
+inside it, together with their paths. Paths are always taken from the current value, never from patches.
 
-- A `RemoteState` is written as its current value. It becomes a separate node that encodes its own value,
-  watches its `StateFlow` and sends an `update` with its path when the value changes.
-- A `RemoteFunction` is written as `{}`. The node that contains it handles calls to its path.
-- Each node knows only paths relative to itself and keeps a tree of what it contains: functions and nested
-  states, keyed by path segments. A call is routed segment by segment down to the node that owns it.
-- When the value of a node changes, everything inside it is dropped and built again from the new value.
-  Nested states that did not change are not affected by updates of their siblings or their children.
+Nested states are matched by instance. If the same `RemoteState` object is still in the value, its node and
+subscription are kept, only its path may change. New objects get new nodes, missing ones are stopped. So
+keep unchanged items as the same objects (for example with `mapListReusable`), otherwise their nodes are
+recreated on every change.
 
-The client mirrors this. Every `RemoteState` becomes a node with its own `StateFlow` and a queue of updates.
-An `update` is routed segment by segment to the node at its path, and that node decodes the new value,
-rebuilding its nested states. Every `RemoteFunction` becomes a lambda that sends a `call` with its path.
+The client mirrors this. A node applies each patch to its current value, decodes new remote states and
+functions from the patch and walks the new value the same way. A function finds its current path when it
+is called, and updates of nested states are routed by path to the matching nodes.
 
 A call goes to whatever function is at its path at the moment the server receives it. If there is none,
-the call fails with `CallError.Outdated`. For example, removing a task twice fails the second time,
-and a call on a logged state after logout fails because `loginState/right/...` no longer exists.
+the call fails with `CallError.Outdated`. A function that is no longer in the client's value fails with
+`CallError.Outdated` without a request. For example, removing a task twice fails the second time, and a
+call on a logged state after logout fails because `loginState/right/...` no longer exists.
 
 ### Protocol
 
@@ -182,13 +207,16 @@ Client to server, the only message is a call:
 Server to client:
 
 ```json
-{"type": "update", "path": "", "value": {"loginState": {"left": {"login": {}}}}}
-{"type": "update", "path": "loginState/right/tasks", "value": {"Buy milk": {"title": "Buy milk", "remove": {}}}}
+{"type": "init", "value": {"loginState": {"left": {"login": {}}}}}
+{"type": "patch", "path": "loginState", "patch": {"right": {"tasks": {}, "addTask": {}, "logout": {}}}}
+{"type": "patch", "path": "loginState/right/tasks", "patch": {"placed": [{"key": "Buy milk"}], "values": {"Buy milk": {"title": "Buy milk", "remove": {}}}}}
 {"type": "call_result", "callId": 3, "result": {"right": {}}}
 {"type": "call_result", "callId": 4, "result": {"left": "outdated"}}
 ```
 
-The server sends the root as an `update` with the empty path right after the connection is opened. Sealed classes are encoded as
+`init` holds the root value and is sent right after the connection is opened. A remote state inside a value
+or a patch is written as its current value, a function as `{}`. Items of `KeyedListRemoteState` are written
+as an object keyed by item keys, so the key is a path segment. Sealed classes are encoded as
 `{"type": ..., "value": ...}`, so `value` appears in paths through them.
 
 A call result and the update it causes are not ordered relative to each other. Wait for the expected
@@ -196,10 +224,13 @@ state rather than reading it right after a call.
 
 ## Notes and limitations
 
-- **Updates send the whole value of a state.** Split large states into nested `RemoteState`s.
-- **Map keys must be non-empty**, even in plain data, because every key is a potential path segment.
-- **Calls go to the current address.** If a key is reused, a call made from an old value reaches the new
-  element with the same key.
+- **Patches must be correct.** If `apply(old, diff(old, new))` differs from `new`, the client's value
+  diverges from the server's, and so do paths.
+- **Every change walks the value of its state** on both sides. The network gets only the patch, but the
+  walk is linear in the size of the value. Split large states into nested states.
+- **Paths inside plain lists are indices.** A call made right before the list changes can reach another
+  item. Use `KeyedListRemoteState` or a `Map` for interactive items.
+- **One `RemoteState` object can be placed only once** in the tree.
 - **Function arguments and results** are plain data encoded with regular JSON. They cannot contain
   `RemoteState` or `RemoteFunction`.
 - **Every connection gets its own model tree.** `createRoot` is called for each connection.

@@ -23,10 +23,16 @@ enum class CallError {
 sealed interface RemoteServerMessage {
 
     @Serializable
-    @SerialName("update")
-    data class Update(
-        val path: RemotePath,
+    @SerialName("init")
+    data class Init(
         val value: JsonElement,
+    ) : RemoteServerMessage
+
+    @Serializable
+    @SerialName("patch")
+    data class Patch(
+        val path: RemotePath,
+        val patch: JsonElement,
     ) : RemoteServerMessage
 
     @Serializable
@@ -36,6 +42,10 @@ sealed interface RemoteServerMessage {
         val result: @Serializable(with = EitherSerializer::class) Either<CallError, JsonElement>,
     ) : RemoteServerMessage
 }
+
+class RemoteCallException(
+    val error: CallError,
+) : Exception("Remote call failed: $error")
 
 @Serializable
 data class RemoteCall(

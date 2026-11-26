@@ -1,11 +1,9 @@
 @file:OptIn(ExperimentalAtomicApi::class)
 
-package org.hnau.remotestate.client
+package org.hnau.remotestate
 
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.channels.Channel
-import kotlinx.coroutines.channels.SendChannel
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.KSerializer
@@ -13,20 +11,8 @@ import kotlinx.serialization.json.JsonElement
 import kotlin.concurrent.atomics.AtomicLong
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.concurrent.atomics.incrementAndFetch
-import org.hnau.remotestate.CallError
-import org.hnau.remotestate.CallId
-import org.hnau.remotestate.RemoteCall
-import org.hnau.remotestate.RemotePath
-import org.hnau.remotestate.RemoteServerMessage
-import org.hnau.remotestate.fold
 
-class RemoteCallException(
-    val error: CallError,
-) : Exception("Remote call failed: $error")
-
-class RemoteConnectionClosedException : Exception("Connection closed")
-
-internal class RemoteClientSession<T>(
+class RemoteClientSession<T>(
     private val scope: CoroutineScope,
     private val rootSerializer: KSerializer<T>,
     private val send: (RemoteCall) -> Unit,
@@ -42,19 +28,26 @@ internal class RemoteClientSession<T>(
 
     val root: CompletableDeferred<T> = CompletableDeferred()
 
-    private var rootUpdates: SendChannel<RemoteUpdate>? = null
+    private var rootNode: RemoteClientNode<T, T>? = null
 
     suspend fun handle(
         message: RemoteServerMessage,
     ) {
         message.fold(
-            ifUpdate = { path, value ->
-                rootUpdates
-                    ?.trySend(path to value)
-                    ?: run {
-                        check(path == RemotePath.root) { "Expected root, got update for $path" }
-                        createRoot(value)
-                    }
+            ifInit = { value ->
+                check(rootNode == null) { "Root was already received" }
+                val node = RemoteClientNode(
+                    scope = scope,
+                    patcher = SnapshotRemoteState.Patcher(rootSerializer),
+                    initial = value,
+                    call = ::call,
+                )
+                rootNode = node
+                root.complete(node.state.value)
+            },
+            ifPatch = { path, patch ->
+                val node = rootNode ?: error("Patch for $path was received before root")
+                node.updates.trySend(path to patch)
             },
             ifCallResult = { callId, result ->
                 completeCall(callId) {
@@ -65,21 +58,6 @@ internal class RemoteClientSession<T>(
                 }
             },
         )
-    }
-
-    private fun createRoot(
-        value: JsonElement,
-    ) {
-        val updates = Channel<RemoteUpdate>(Channel.UNLIMITED)
-        rootUpdates = updates
-        val state = receiveRemoteState(
-            scope = scope,
-            serializer = rootSerializer,
-            initial = value,
-            updates = updates,
-            call = ::call,
-        )
-        root.complete(state.value)
     }
 
     suspend fun close(

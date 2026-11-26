@@ -16,7 +16,7 @@ import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
-import org.hnau.remotestate.client.RemoteCallException
+import org.hnau.remotestate.RemoteCallException
 import org.hnau.remotestate.client.RemoteConnectionClosedException
 import org.hnau.remotestate.client.RemoteConnectionState
 import org.hnau.remotestate.client.connectRemoteState
@@ -82,12 +82,13 @@ class RemoteStateTest {
                     logged.addTask("first")
                     logged.addTask("second")
                     val tasks = logged.tasks.state.first { it.size == 2 }
-                    assertEquals(listOf("first", "second"), tasks.values.map(TaskState::title))
+                    assertEquals(listOf("first", "second"), tasks.map { it.value.title })
 
-                    tasks.getValue("first").remove()
-                    val remaining = logged.tasks.state.first { it.size == 1 }.values.single()
+                    val first = tasks.first { it.key == "first" }.value
+                    first.remove()
+                    val remaining = logged.tasks.state.first { it.size == 1 }.single().value
                     assertEquals("second", remaining.title)
-                    assertFailsWith<RemoteCallException> { tasks.getValue("first").remove() }
+                    assertFailsWith<RemoteCallException> { first.remove() }
                     remaining.remove()
                     logged.tasks.state.first { it.isEmpty() }
 

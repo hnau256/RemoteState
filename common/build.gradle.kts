@@ -11,5 +11,11 @@ kotlin {
                 api(hnau.kotlinx.serialization.json)
             }
         }
+
+        jvmTest {
+            dependencies {
+                implementation(kotlin("test"))
+            }
+        }
     }
 }

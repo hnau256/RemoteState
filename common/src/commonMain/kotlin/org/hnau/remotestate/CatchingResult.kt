@@ -1,4 +1,4 @@
-package org.hnau.remotestate.server
+package org.hnau.remotestate
 
 import kotlinx.coroutines.CancellationException
 
