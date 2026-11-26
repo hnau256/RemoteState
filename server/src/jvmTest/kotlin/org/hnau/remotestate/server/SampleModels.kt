@@ -11,8 +11,8 @@ import org.hnau.commons.kotlin.coroutines.flow.state.mapWithScope
 import org.hnau.commons.kotlin.coroutines.flow.state.mutable.toMutableStateFlowAsInitial
 import org.hnau.commons.kotlin.foldBoolean
 import org.hnau.commons.kotlin.KeyValue
-import org.hnau.remotestate.toKeyedListRemoteState
-import org.hnau.remotestate.toSnapshotRemoteState
+import org.hnau.remotestate.common.toKeyedListRemoteState
+import org.hnau.remotestate.common.toSnapshotRemoteState
 
 class TaskModel(
     title: String,

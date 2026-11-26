@@ -1,26 +1,30 @@
-package org.hnau.remotestate
+package org.hnau.remotestate.common
 
 import kotlinx.serialization.SerializationStrategy
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 
-internal class RemoteStateEntry(
+@RemoteStateInternalApi
+class RemoteStateEntry(
     val patcher: RemoteStatePatcher<*, *, *>,
     val state: RemoteState<*>,
 )
 
-internal class RemoteFunctionEntry(
+@RemoteStateInternalApi
+class RemoteFunctionEntry(
     val serializer: RemoteFunctionSerializer<*, *>,
     val function: RemoteFunction<*, *>,
 )
 
-internal class RemoteTreeWalk(
+@RemoteStateInternalApi
+class RemoteTreeWalk(
     val states: Map<RemotePath, RemoteStateEntry>,
     val functions: Map<RemotePath, RemoteFunctionEntry>,
 )
 
-internal fun <T> walkTree(
+@RemoteStateInternalApi
+fun <T> walkTree(
     serializer: SerializationStrategy<T>,
     value: T,
 ): RemoteTreeWalk {
@@ -55,12 +59,14 @@ internal fun <T> walkTree(
     )
 }
 
-internal class EncodedRemoteValue(
+@RemoteStateInternalApi
+class EncodedRemoteValue(
     val element: JsonElement,
     val states: Map<RemoteState<*>, Any?>,
 )
 
-internal fun <T> encodeRemoteValue(
+@RemoteStateInternalApi
+fun <T> encodeRemoteValue(
     serializer: SerializationStrategy<T>,
     value: T,
 ): EncodedRemoteValue {

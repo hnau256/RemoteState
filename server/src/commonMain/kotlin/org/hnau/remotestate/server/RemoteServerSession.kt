@@ -1,4 +1,4 @@
-package org.hnau.remotestate
+package org.hnau.remotestate.server
 
 import arrow.core.left
 import arrow.core.right
@@ -6,8 +6,13 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.KSerializer
+import org.hnau.remotestate.common.CallError
+import org.hnau.remotestate.common.RemoteCall
+import org.hnau.remotestate.common.RemoteServerMessage
+import org.hnau.remotestate.common.SnapshotRemoteState
+import org.hnau.remotestate.common.encodeRemoteValue
 
-class RemoteServerSession private constructor(
+internal class RemoteServerSession private constructor(
     private val scope: CoroutineScope,
     private val sendMessage: (RemoteServerMessage) -> Unit,
     private val onError: (Throwable) -> Unit,

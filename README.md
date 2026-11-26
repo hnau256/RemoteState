@@ -14,7 +14,7 @@ Every remote value is addressed by its path in the tree, for example `loginState
 
 | Module   | Contents                                                                                                                |
 |----------|-------------------------------------------------------------------------------------------------------------------------|
-| `common` | Remote states, `RemoteFunction`, wire protocol and transport-agnostic sessions. Depend on it from the module with your state classes. |
+| `common` | Remote states, `RemoteFunction`, wire protocol. Depend on it from the module with your state classes.          |
 | `server` | `Route.remoteState(...)`: a Ktor WebSocket route that serves the state tree.                                          |
 | `client` | `HttpClient.connectRemoteState(...)`: connects, reconnects and exposes the mirrored tree as a `StateFlow`.              |
 

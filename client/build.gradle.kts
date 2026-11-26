@@ -5,6 +5,10 @@ plugins {
 
 kotlin {
     sourceSets {
+        all {
+            languageSettings.optIn("org.hnau.remotestate.common.RemoteStateInternalApi")
+        }
+
         commonMain {
             dependencies {
                 api(project(":common"))

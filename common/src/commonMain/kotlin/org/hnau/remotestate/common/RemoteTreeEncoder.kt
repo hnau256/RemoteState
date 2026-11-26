@@ -1,6 +1,6 @@
 @file:OptIn(ExperimentalSerializationApi::class)
 
-package org.hnau.remotestate
+package org.hnau.remotestate.common
 
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerializationStrategy
@@ -15,7 +15,8 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.modules.SerializersModule
 
-internal interface RemoteTreeEncodeContext {
+@RemoteStateInternalApi
+interface RemoteTreeEncodeContext {
 
     fun encodeState(
         path: RemotePath,
@@ -30,7 +31,8 @@ internal interface RemoteTreeEncodeContext {
     ): JsonElement
 }
 
-internal fun <T> RemoteTreeEncodeContext.encodeTree(
+@RemoteStateInternalApi
+fun <T> RemoteTreeEncodeContext.encodeTree(
     serializer: SerializationStrategy<T>,
     value: T,
 ): JsonElement {

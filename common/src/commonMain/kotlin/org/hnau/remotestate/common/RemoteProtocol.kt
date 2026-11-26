@@ -1,4 +1,4 @@
-package org.hnau.remotestate
+package org.hnau.remotestate.common
 
 import arrow.core.Either
 import arrow.core.serialization.EitherSerializer
@@ -42,10 +42,6 @@ sealed interface RemoteServerMessage {
         val result: @Serializable(with = EitherSerializer::class) Either<CallError, JsonElement>,
     ) : RemoteServerMessage
 }
-
-class RemoteCallException(
-    val error: CallError,
-) : Exception("Remote call failed: $error")
 
 @Serializable
 data class RemoteCall(

@@ -19,10 +19,10 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.Serializable
-import org.hnau.remotestate.SnapshotRemoteState
+import org.hnau.remotestate.common.SnapshotRemoteState
 import org.hnau.remotestate.client.RemoteConnectionState
 import org.hnau.remotestate.client.connectRemoteState
-import org.hnau.remotestate.toSnapshotRemoteState
+import org.hnau.remotestate.common.toSnapshotRemoteState
 import kotlin.jvm.JvmInline
 import kotlin.test.Test
 import kotlin.test.assertEquals

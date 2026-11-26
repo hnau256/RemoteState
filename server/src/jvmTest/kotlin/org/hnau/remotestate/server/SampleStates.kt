@@ -3,9 +3,9 @@ package org.hnau.remotestate.server
 import arrow.core.Either
 import kotlinx.serialization.Serializable
 import arrow.core.serialization.EitherSerializer
-import org.hnau.remotestate.RemoteFunction
-import org.hnau.remotestate.KeyedListRemoteState
-import org.hnau.remotestate.SnapshotRemoteState
+import org.hnau.remotestate.common.RemoteFunction
+import org.hnau.remotestate.common.KeyedListRemoteState
+import org.hnau.remotestate.common.SnapshotRemoteState
 
 @Serializable
 data class TaskState(

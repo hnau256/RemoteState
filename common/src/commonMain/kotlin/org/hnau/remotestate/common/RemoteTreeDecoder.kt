@@ -1,6 +1,6 @@
 @file:OptIn(ExperimentalSerializationApi::class)
 
-package org.hnau.remotestate
+package org.hnau.remotestate.common
 
 import kotlinx.serialization.DeserializationStrategy
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -15,7 +15,8 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.modules.SerializersModule
 
-internal interface RemoteTreeDecodeContext {
+@RemoteStateInternalApi
+interface RemoteTreeDecodeContext {
 
     fun decodeState(
         patcher: RemoteStatePatcher<*, *, *>,
@@ -27,7 +28,8 @@ internal interface RemoteTreeDecodeContext {
     ): RemoteFunction<*, *>
 }
 
-internal fun <T> RemoteTreeDecodeContext.decodeTree(
+@RemoteStateInternalApi
+fun <T> RemoteTreeDecodeContext.decodeTree(
     deserializer: DeserializationStrategy<T>,
     element: JsonElement,
 ): T = RootDecoder(

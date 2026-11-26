@@ -20,12 +20,12 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.serializer
-import org.hnau.remotestate.RemoteState
-import org.hnau.remotestate.RemoteStatePatcher
-import org.hnau.remotestate.SnapshotRemoteState
+import org.hnau.remotestate.common.RemoteState
+import org.hnau.remotestate.common.RemoteStatePatcher
+import org.hnau.remotestate.common.SnapshotRemoteState
 import org.hnau.remotestate.client.RemoteConnectionState
 import org.hnau.remotestate.client.connectRemoteState
-import org.hnau.remotestate.toSnapshotRemoteState
+import org.hnau.remotestate.common.toSnapshotRemoteState
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.time.Duration.Companion.seconds

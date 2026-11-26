@@ -1,18 +1,29 @@
 @file:OptIn(ExperimentalAtomicApi::class)
 
-package org.hnau.remotestate
+package org.hnau.remotestate.client
 
+import kotlin.concurrent.atomics.AtomicLong
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.concurrent.atomics.incrementAndFetch
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.JsonElement
-import kotlin.concurrent.atomics.AtomicLong
-import kotlin.concurrent.atomics.ExperimentalAtomicApi
-import kotlin.concurrent.atomics.incrementAndFetch
+import org.hnau.remotestate.common.CallError
+import org.hnau.remotestate.common.CallId
+import org.hnau.remotestate.common.RemoteCall
+import org.hnau.remotestate.common.RemotePath
+import org.hnau.remotestate.common.RemoteServerMessage
+import org.hnau.remotestate.common.SnapshotRemoteState
+import org.hnau.remotestate.common.fold
 
-class RemoteClientSession<T>(
+class RemoteCallException(
+    val error: CallError,
+) : Exception("Remote call failed: $error")
+
+internal class RemoteClientSession<T>(
     private val scope: CoroutineScope,
     private val rootSerializer: KSerializer<T>,
     private val send: (RemoteCall) -> Unit,

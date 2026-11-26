@@ -1,8 +1,9 @@
-package org.hnau.remotestate
+package org.hnau.remotestate.common
 
 import org.hnau.commons.gen.fold.annotations.Fold
 
 @Fold
+@RemoteStateInternalApi
 sealed interface RemoteTree<out L> {
 
     data class Leaf<out L>(
@@ -31,6 +32,7 @@ sealed interface RemoteTree<out L> {
     }
 }
 
+@RemoteStateInternalApi
 fun <L> RemoteTree<L>.find(
     path: RemotePath,
 ): Pair<L, RemotePath>? = fold(

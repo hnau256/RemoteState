@@ -1,4 +1,4 @@
-package org.hnau.remotestate
+package org.hnau.remotestate.common
 
 import org.hnau.commons.kotlin.KeyValue
 import kotlin.random.Random
