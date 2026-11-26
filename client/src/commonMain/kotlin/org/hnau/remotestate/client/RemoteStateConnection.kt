@@ -17,18 +17,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
-import org.hnau.remotestate.RemoteClientMessage
+import org.hnau.remotestate.RemoteCall
 import org.hnau.remotestate.RemoteJson
-import org.hnau.remotestate.RemoteRoute
 import org.hnau.remotestate.RemoteServerMessage
-import org.hnau.remotestate.SessionId
 import kotlin.time.Clock
 import kotlin.time.Duration
 
 fun <T> HttpClient.connectRemoteState(
     scope: CoroutineScope,
-    baseUrl: String,
-    sessionId: SessionId,
+    url: String,
     serializer: KSerializer<T>,
     reconnectDelay: (failedAttempts: Int) -> Duration = exponentialReconnectDelay(),
 ): StateFlow<RemoteConnectionState<T>> {
@@ -38,8 +35,7 @@ fun <T> HttpClient.connectRemoteState(
         while (true) {
             connectionState.value = RemoteConnectionState.Connecting
             val cause = runConnection(
-                url = baseUrl.trimEnd('/') + RemoteRoute,
-                sessionId = sessionId,
+                url = url,
                 serializer = serializer,
                 onRoot = { root ->
                     failedAttempts = 0
@@ -60,7 +56,6 @@ fun <T> HttpClient.connectRemoteState(
 
 private suspend fun <T> HttpClient.runConnection(
     url: String,
-    sessionId: SessionId,
     serializer: KSerializer<T>,
     onRoot: (T) -> Unit,
 ): Throwable {
@@ -71,8 +66,7 @@ private suspend fun <T> HttpClient.runConnection(
     } catch (error: Throwable) {
         return error
     }
-    val messages = Channel<RemoteClientMessage>(Channel.UNLIMITED)
-    messages.trySend(RemoteClientMessage.Hello(sessionId))
+    val messages = Channel<RemoteCall>(Channel.UNLIMITED)
     val session = RemoteClientSession(
         rootSerializer = serializer,
         send = { messages.trySend(it) },
@@ -85,7 +79,7 @@ private suspend fun <T> HttpClient.runConnection(
                     socket.outgoing.send(
                         Frame.Text(
                             RemoteJson.encodeToString(
-                                serializer = RemoteClientMessage.serializer(),
+                                serializer = RemoteCall.serializer(),
                                 value = message,
                             )
                         )

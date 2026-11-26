@@ -9,7 +9,7 @@ kotlin {
             dependencies {
                 api(project(":common"))
                 api(hnau.ktor.server.core)
-                implementation(hnau.ktor.server.websockets)
+                api(hnau.ktor.server.websockets)
             }
         }
 

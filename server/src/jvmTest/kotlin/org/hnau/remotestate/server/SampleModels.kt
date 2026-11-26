@@ -6,6 +6,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import org.hnau.commons.kotlin.coroutines.flow.state.mapListReusable
+import org.hnau.commons.kotlin.coroutines.flow.state.mapState
 import org.hnau.commons.kotlin.coroutines.flow.state.mapWithScope
 import org.hnau.commons.kotlin.coroutines.flow.state.mutable.toMutableStateFlowAsInitial
 import org.hnau.commons.kotlin.foldBoolean
@@ -41,6 +42,7 @@ class LoggedModel(
                     remove = { tasksTitles.update { titles -> titles.filter { it != title } } },
                 ).state
             }
+            .mapState(scope) { tasks -> tasks.associateBy(TaskState::title) }
             .toRemoteState(),
         addTask = { title -> tasksTitles.update { it + title } },
         logout = { logout() },

@@ -6,8 +6,6 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
 
-const val RemoteRoute: String = "/remote"
-
 @Serializable
 enum class CallError {
 
@@ -24,7 +22,7 @@ sealed interface RemoteServerMessage {
     @Serializable
     @SerialName("update")
     data class Update(
-        val stateId: StateId,
+        val path: RemotePath,
         val value: JsonElement,
     ) : RemoteServerMessage
 
@@ -37,19 +35,8 @@ sealed interface RemoteServerMessage {
 }
 
 @Serializable
-sealed interface RemoteClientMessage {
-
-    @Serializable
-    @SerialName("hello")
-    data class Hello(
-        val sessionId: SessionId,
-    ) : RemoteClientMessage
-
-    @Serializable
-    @SerialName("call")
-    data class Call(
-        val callId: CallId,
-        val function: FunctionId,
-        val argument: JsonElement,
-    ) : RemoteClientMessage
-}
+data class RemoteCall(
+    val callId: CallId,
+    val path: RemotePath,
+    val argument: JsonElement,
+)

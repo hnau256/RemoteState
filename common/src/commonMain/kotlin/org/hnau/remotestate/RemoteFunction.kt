@@ -1,9 +1,11 @@
 package org.hnau.remotestate
 
-import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.descriptors.SerialDescriptor
+import kotlinx.serialization.descriptors.buildClassSerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
 
 @Serializable(with = RemoteFunctionSerializer::class)
 fun interface RemoteFunction<in A, out R> {
@@ -14,14 +16,22 @@ fun interface RemoteFunction<in A, out R> {
 suspend operator fun <R> RemoteFunction<Unit, R>.invoke(): R = invoke(Unit)
 
 class RemoteFunctionSerializer<A, R>(
-    argumentSerializer: KSerializer<A>,
-    resultSerializer: KSerializer<R>,
-) : RemoteContextualSerializer<RemoteFunction<A, R>>(
-    kClass = RemoteFunction::class,
-    typeArgumentsSerializers = listOf(argumentSerializer, resultSerializer),
-    descriptor = RemoteFunctionDescriptor,
-)
+    val argumentSerializer: KSerializer<A>,
+    val resultSerializer: KSerializer<R>,
+) : KSerializer<RemoteFunction<A, R>> {
 
-@OptIn(ExperimentalSerializationApi::class)
-val RemoteFunctionDescriptor: SerialDescriptor =
-    SerialDescriptor("RemoteFunction", FunctionId.serializer().descriptor)
+    override val descriptor: SerialDescriptor = buildClassSerialDescriptor(
+        serialName = "RemoteFunction<${argumentSerializer.descriptor.serialName};${resultSerializer.descriptor.serialName}>",
+    )
+
+    override fun serialize(
+        encoder: Encoder,
+        value: RemoteFunction<A, R>,
+    ) {
+        throw outsideOfSessionException()
+    }
+
+    override fun deserialize(
+        decoder: Decoder,
+    ): RemoteFunction<A, R> = throw outsideOfSessionException()
+}

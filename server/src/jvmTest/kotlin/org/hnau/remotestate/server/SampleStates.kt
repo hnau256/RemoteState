@@ -14,7 +14,7 @@ data class TaskState(
 
 @Serializable
 data class LoggedState(
-    val tasks: RemoteState<List<TaskState>>,
+    val tasks: RemoteState<Map<String, TaskState>>,
     val addTask: RemoteFunction<String, Unit>,
     val logout: RemoteFunction<Unit, Unit>,
 )

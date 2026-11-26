@@ -1,10 +1,12 @@
 package org.hnau.remotestate
 
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.descriptors.SerialDescriptor
-import kotlinx.serialization.descriptors.buildClassSerialDescriptor
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
 
 @Serializable(with = RemoteStateSerializer::class)
 class RemoteState<out T>(
@@ -16,22 +18,26 @@ fun <T> StateFlow<T>.toRemoteState(): RemoteState<T> = RemoteState(
 )
 
 class RemoteStateSerializer<T>(
-    valueSerializer: KSerializer<T>,
-) : RemoteContextualSerializer<RemoteState<T>>(
-    kClass = RemoteState::class,
-    typeArgumentsSerializers = listOf(valueSerializer),
-    descriptor = remoteStateDescriptor(valueSerializer.descriptor),
-)
+    val valueSerializer: KSerializer<T>,
+) : KSerializer<RemoteState<T>> {
 
-fun remoteStateDescriptor(
-    valueDescriptor: SerialDescriptor,
-): SerialDescriptor = buildClassSerialDescriptor(
-    serialName = "RemoteState<${valueDescriptor.serialName}>",
-) {
-    element(RemoteStateIdElement, StateId.serializer().descriptor)
-    element(RemoteStateValueElement, valueDescriptor)
+    @OptIn(ExperimentalSerializationApi::class)
+    override val descriptor: SerialDescriptor = SerialDescriptor(
+        serialName = "RemoteState<${valueSerializer.descriptor.serialName}>",
+        original = valueSerializer.descriptor,
+    )
+
+    override fun serialize(
+        encoder: Encoder,
+        value: RemoteState<T>,
+    ) {
+        throw outsideOfSessionException()
+    }
+
+    override fun deserialize(
+        decoder: Decoder,
+    ): RemoteState<T> = throw outsideOfSessionException()
 }
 
-const val RemoteStateIdElement: String = "id"
-
-const val RemoteStateValueElement: String = "value"
+internal fun outsideOfSessionException(): IllegalStateException =
+    IllegalStateException("RemoteState and RemoteFunction can be serialized only inside remote session")
