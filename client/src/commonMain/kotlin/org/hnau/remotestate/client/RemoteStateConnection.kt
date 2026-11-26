@@ -7,7 +7,10 @@ import io.ktor.websocket.close
 import io.ktor.websocket.readText
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
@@ -35,6 +38,7 @@ fun <T> HttpClient.connectRemoteState(
         while (true) {
             connectionState.value = RemoteConnectionState.Connecting
             val cause = runConnection(
+                scope = this,
                 url = url,
                 serializer = serializer,
                 onRoot = { root ->
@@ -55,6 +59,7 @@ fun <T> HttpClient.connectRemoteState(
 }
 
 private suspend fun <T> HttpClient.runConnection(
+    scope: CoroutineScope,
     url: String,
     serializer: KSerializer<T>,
     onRoot: (T) -> Unit,
@@ -67,7 +72,9 @@ private suspend fun <T> HttpClient.runConnection(
         return error
     }
     val messages = Channel<RemoteCall>(Channel.UNLIMITED)
+    val connectionScope = CoroutineScope(scope.coroutineContext + Job(scope.coroutineContext.job))
     val session = RemoteClientSession(
+        scope = connectionScope,
         rootSerializer = serializer,
         send = { messages.trySend(it) },
     )
@@ -108,6 +115,7 @@ private suspend fun <T> HttpClient.runConnection(
     } finally {
         withContext(NonCancellable) {
             messages.close()
+            connectionScope.cancel()
             session.close(cause)
             socket.close()
         }

@@ -5,7 +5,9 @@ import arrow.core.serialization.EitherSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonElement
+import org.hnau.commons.gen.fold.annotations.Fold
 
+@Fold
 @Serializable
 enum class CallError {
 
@@ -16,6 +18,7 @@ enum class CallError {
     Internal,
 }
 
+@Fold
 @Serializable
 sealed interface RemoteServerMessage {
 

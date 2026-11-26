@@ -18,6 +18,7 @@ import org.hnau.remotestate.RemoteFunction
 import org.hnau.remotestate.RemoteFunctionSerializer
 import org.hnau.remotestate.RemoteJson
 import org.hnau.remotestate.RemotePath
+import org.hnau.remotestate.RemotePathSegment
 import org.hnau.remotestate.RemoteState
 import org.hnau.remotestate.RemoteStateSerializer
 
@@ -36,12 +37,10 @@ internal interface RemoteTreeDecodeContext {
 }
 
 internal fun <T> RemoteTreeDecodeContext.decodeTree(
-    path: RemotePath,
     deserializer: DeserializationStrategy<T>,
     element: JsonElement,
 ): T = RootDecoder(
     context = this,
-    elementPath = path,
     element = element,
 ).decodeSerializableValue(deserializer)
 
@@ -128,9 +127,10 @@ private abstract class TreeDecoder(
 
 private class RootDecoder(
     context: RemoteTreeDecodeContext,
-    override val elementPath: RemotePath,
     override val element: JsonElement,
 ) : TreeDecoder(context, insideList = false) {
+
+    override val elementPath: RemotePath = RemotePath.root
 
     override fun decodeElementIndex(
         descriptor: SerialDescriptor,
@@ -154,7 +154,7 @@ private class ObjectDecoder(
         get() = content.getValue(name)
 
     override val elementPath: RemotePath
-        get() = path / name
+        get() = path / RemotePathSegment(name)
 
     override fun decodeElementIndex(
         descriptor: SerialDescriptor,
@@ -180,7 +180,7 @@ private class ListDecoder(
         get() = content[index]
 
     override val elementPath: RemotePath
-        get() = path / index.toString()
+        get() = path / RemotePathSegment(index.toString())
 
     override fun decodeElementIndex(
         descriptor: SerialDescriptor,
@@ -210,7 +210,7 @@ private class MapDecoder(
     override val elementPath: RemotePath
         get() {
             check(!decodingKey) { "Map keys at $path must be primitive" }
-            return path / entry.key
+            return path / RemotePathSegment(entry.key)
         }
 
     override fun decodeElementIndex(

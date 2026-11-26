@@ -2,6 +2,7 @@ package org.hnau.remotestate.server
 
 import org.hnau.remotestate.RemoteJson
 import org.hnau.remotestate.RemotePath
+import org.hnau.remotestate.RemotePathSegment
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -16,7 +17,7 @@ class RemotePathTest {
 
     @Test
     fun segmentsAreEscaped() {
-        val path = RemotePath.root / "tasks" / "a/b" / "~" / "remove"
+        val path = RemotePath(listOf("tasks", "a/b", "~", "remove").map(::RemotePathSegment))
         val encoded = RemoteJson.encodeToString(RemotePath.serializer(), path)
         assertEquals("\"tasks/a~/b/~~/remove\"", encoded)
         assertEquals(path, RemoteJson.decodeFromString(RemotePath.serializer(), encoded))
@@ -24,6 +25,6 @@ class RemotePathTest {
 
     @Test
     fun emptySegmentsAreRejected() {
-        assertFailsWith<IllegalArgumentException> { RemotePath.root / "tasks" / "" }
+        assertFailsWith<IllegalArgumentException> { RemotePath.stringMapper.direct("tasks//remove") }
     }
 }

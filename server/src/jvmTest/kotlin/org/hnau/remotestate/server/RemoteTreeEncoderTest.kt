@@ -58,12 +58,11 @@ class RemoteTreeEncoderTest {
     fun remoteValuesInsideMapGetKeyPaths() {
         val context = RecordingContext()
         context.encodeTree(
-            path = RemotePath.root / "items",
             serializer = MapSerializer(String.serializer(), Item.serializer()),
             value = mapOf("a" to item(), "b" to item()),
         )
         assertEquals(
-            listOf("items/a/state", "items/a/action", "items/b/state", "items/b/action"),
+            listOf("a/state", "a/action", "b/state", "b/action"),
             context.paths,
         )
     }
@@ -72,7 +71,6 @@ class RemoteTreeEncoderTest {
     fun remoteValuesInsideListAreRejected() {
         assertFailsWith<IllegalStateException> {
             RecordingContext().encodeTree(
-                path = RemotePath.root,
                 serializer = ListSerializer(Item.serializer()),
                 value = listOf(item()),
             )

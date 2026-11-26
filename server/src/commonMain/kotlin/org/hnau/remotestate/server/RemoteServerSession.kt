@@ -3,47 +3,26 @@ package org.hnau.remotestate.server
 import arrow.core.left
 import arrow.core.right
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
 import org.hnau.remotestate.CallError
 import org.hnau.remotestate.RemoteCall
-import org.hnau.remotestate.RemoteFunction
-import org.hnau.remotestate.RemoteFunctionSerializer
-import org.hnau.remotestate.RemoteJson
 import org.hnau.remotestate.RemotePath
 import org.hnau.remotestate.RemoteServerMessage
-import org.hnau.remotestate.RemoteState
-import org.hnau.remotestate.RemoteStateSerializer
 
-internal class RemoteServerSession(
+internal class RemoteServerSession private constructor(
     private val scope: CoroutineScope,
     private val sendMessage: (RemoteServerMessage) -> Unit,
     private val onError: (Throwable) -> Unit,
-) : RemoteTreeEncodeContext {
-
-    private val functions: MutableMap<RemotePath, suspend (JsonElement) -> JsonElement> = HashMap()
-
-    private val subscriptions: MutableMap<RemotePath, Job> = HashMap()
-
-    fun <T> start(
-        serializer: KSerializer<T>,
-        root: T,
-    ) {
-        sendMessage(
-            RemoteServerMessage.Update(
-                path = RemotePath.root,
-                value = encodeTree(RemotePath.root, serializer, root),
-            )
-        )
-    }
+    private val root: RemoteHandler,
+) {
 
     fun handle(
         call: RemoteCall,
     ) {
-        val function = functions[call.path] ?: run {
+        val function = root(call.path) ?: run {
             sendMessage(
                 RemoteServerMessage.CallResult(
                     callId = call.callId,
@@ -71,55 +50,31 @@ internal class RemoteServerSession(
         }
     }
 
-    private fun disposeInside(
-        path: RemotePath,
-    ) {
-        functions.keys.removeAll { it.isStrictlyInside(path) }
-        subscriptions.keys
-            .filter { it.isStrictlyInside(path) }
-            .forEach { subscriptions.remove(it)?.cancel() }
-    }
+    companion object {
 
-    override fun <T> encodeState(
-        path: RemotePath,
-        serializer: RemoteStateSerializer<T>,
-        state: RemoteState<T>,
-    ): JsonElement {
-        val initialValue = state.state.value
-        val element = encodeTree(path, serializer.valueSerializer, initialValue)
-        var lastValue = initialValue
-        subscriptions.put(
-            path,
-            scope.launch {
-                state.state.collect { newValue ->
-                    if (newValue == lastValue) {
-                        return@collect
-                    }
-                    lastValue = newValue
-                    disposeInside(path)
-                    sendMessage(
-                        RemoteServerMessage.Update(
-                            path = path,
-                            value = encodeTree(path, serializer.valueSerializer, newValue),
-                        )
-                    )
-                }
-            },
-        )?.cancel()
-        return element
-    }
-
-    override fun <A, R> encodeFunction(
-        path: RemotePath,
-        serializer: RemoteFunctionSerializer<A, R>,
-        function: RemoteFunction<A, R>,
-    ): JsonElement {
-        functions[path] = { argument ->
-            RemoteJson.encodeToJsonElement(
-                serializer = serializer.resultSerializer,
-                value = function(RemoteJson.decodeFromJsonElement(serializer.argumentSerializer, argument)),
+        fun <T> start(
+            scope: CoroutineScope,
+            sendMessage: (RemoteServerMessage) -> Unit,
+            onError: (Throwable) -> Unit,
+            serializer: KSerializer<T>,
+            root: T,
+        ): RemoteServerSession {
+            val sendUpdate = { path: RemotePath, value: JsonElement ->
+                sendMessage(RemoteServerMessage.Update(path = path, value = value))
+            }
+            val served = serveRemoteState(
+                scope = scope,
+                serializer = serializer,
+                state = MutableStateFlow(root),
+                sendUpdate = sendUpdate,
+            )
+            sendUpdate(RemotePath.root, served.initial)
+            return RemoteServerSession(
+                scope = scope,
+                sendMessage = sendMessage,
+                onError = onError,
+                root = served.handler,
             )
         }
-        return JsonObject(emptyMap())
     }
 }

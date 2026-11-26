@@ -1,7 +1,9 @@
 package org.hnau.remotestate.client
 
+import org.hnau.commons.gen.fold.annotations.Fold
 import kotlin.time.Instant
 
+@Fold
 sealed interface RemoteConnectionState<out T> {
 
     data object Connecting : RemoteConnectionState<Nothing>

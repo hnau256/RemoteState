@@ -8,26 +8,39 @@ import org.hnau.commons.kotlin.mapper.stringToStringsBySeparator
 import org.hnau.commons.kotlin.serialization.MappingKSerializer
 import kotlin.jvm.JvmInline
 
-@Serializable(with = RemotePath.Serializer::class)
 @JvmInline
-value class RemotePath(
-    val segments: List<String>,
+value class RemotePathSegment(
+    val value: String,
 ) {
 
     init {
-        require(segments.none(String::isEmpty)) { "Remote path segments must not be empty: $segments" }
+        require(value.isNotEmpty()) { "Remote path segment must not be empty" }
     }
 
+    override fun toString(): String = value
+}
+
+@Serializable(with = RemotePath.Serializer::class)
+@JvmInline
+value class RemotePath(
+    val segments: List<RemotePathSegment>,
+) {
+
     operator fun div(
-        segment: String,
+        segment: RemotePathSegment,
     ): RemotePath = RemotePath(
         segments = segments + segment,
     )
 
-    fun isStrictlyInside(
-        parent: RemotePath,
-    ): Boolean = segments.size > parent.segments.size &&
-            segments.subList(0, parent.segments.size) == parent.segments
+    operator fun plus(
+        other: RemotePath,
+    ): RemotePath = RemotePath(
+        segments = segments + other.segments,
+    )
+
+    fun split(): Pair<RemotePathSegment, RemotePath>? = segments
+        .firstOrNull()
+        ?.let { head -> head to RemotePath(segments.drop(1)) }
 
     override fun toString(): String = stringMapper.reverse(this)
 
@@ -45,6 +58,9 @@ value class RemotePath(
         val stringMapper: Mapper<String, RemotePath> = Mapper.stringToStringsBySeparator(
             separator = '/',
             escape = '~',
-        ) + Mapper(::RemotePath, RemotePath::segments)
+        ) + Mapper(
+            direct = { strings -> RemotePath(strings.map(::RemotePathSegment)) },
+            reverse = { path -> path.segments.map(RemotePathSegment::value) },
+        )
     }
 }

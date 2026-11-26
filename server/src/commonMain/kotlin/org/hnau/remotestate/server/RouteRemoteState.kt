@@ -45,16 +45,13 @@ fun <T> Route.remoteState(
         }
         try {
             val session = withContext(dispatcher) {
-                RemoteServerSession(
+                RemoteServerSession.start(
                     scope = sessionScope,
                     sendMessage = { messages.trySend(it) },
                     onError = onError,
-                ).also { session ->
-                    session.start(
-                        serializer = serializer,
-                        root = createRoot(sessionScope),
-                    )
-                }
+                    serializer = serializer,
+                    root = createRoot(sessionScope),
+                )
             }
             for (frame in incoming) {
                 val text = (frame as? Frame.Text)?.readText() ?: continue

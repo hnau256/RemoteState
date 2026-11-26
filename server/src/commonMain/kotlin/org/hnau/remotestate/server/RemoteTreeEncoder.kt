@@ -18,6 +18,7 @@ import org.hnau.remotestate.RemoteFunction
 import org.hnau.remotestate.RemoteFunctionSerializer
 import org.hnau.remotestate.RemoteJson
 import org.hnau.remotestate.RemotePath
+import org.hnau.remotestate.RemotePathSegment
 import org.hnau.remotestate.RemoteState
 import org.hnau.remotestate.RemoteStateSerializer
 
@@ -37,17 +38,15 @@ internal interface RemoteTreeEncodeContext {
 }
 
 internal fun <T> RemoteTreeEncodeContext.encodeTree(
-    path: RemotePath,
     serializer: SerializationStrategy<T>,
     value: T,
 ): JsonElement {
     var result: JsonElement? = null
     RootEncoder(
         context = this,
-        path = path,
         onResult = { result = it },
     ).encodeSerializableValue(serializer, value)
-    return result ?: error("Nothing was encoded at $path")
+    return result ?: error("Nothing was encoded")
 }
 
 private abstract class TreeEncoder(
@@ -129,11 +128,10 @@ private abstract class TreeEncoder(
 
 private class RootEncoder(
     context: RemoteTreeEncodeContext,
-    path: RemotePath,
     private val onResult: (JsonElement) -> Unit,
 ) : TreeEncoder(context, insideList = false) {
 
-    override val elementPath: RemotePath = path
+    override val elementPath: RemotePath = RemotePath.root
 
     override fun put(
         element: JsonElement,
@@ -156,7 +154,7 @@ private class ObjectEncoder(
     private fun key(): String = key ?: error("No element is being encoded at $path")
 
     override val elementPath: RemotePath
-        get() = path / key()
+        get() = path / RemotePathSegment(key())
 
     override fun encodeElement(
         descriptor: SerialDescriptor,
@@ -188,7 +186,7 @@ private class ListEncoder(
     private val content: MutableList<JsonElement> = mutableListOf()
 
     override val elementPath: RemotePath
-        get() = path / content.size.toString()
+        get() = path / RemotePathSegment(content.size.toString())
 
     override fun put(
         element: JsonElement,
@@ -221,7 +219,7 @@ private class MapEncoder(
     override val elementPath: RemotePath
         get() {
             check(!encodingKey) { "Map keys at $path must be primitive" }
-            return path / key()
+            return path / RemotePathSegment(key())
         }
 
     override fun encodeElement(

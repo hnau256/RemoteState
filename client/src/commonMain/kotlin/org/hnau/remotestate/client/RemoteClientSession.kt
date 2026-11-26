@@ -1,22 +1,24 @@
+@file:OptIn(ExperimentalAtomicApi::class)
+
 package org.hnau.remotestate.client
 
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.SendChannel
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.JsonElement
+import kotlin.concurrent.atomics.AtomicLong
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.concurrent.atomics.incrementAndFetch
 import org.hnau.remotestate.CallError
 import org.hnau.remotestate.CallId
-import org.hnau.remotestate.IdFactory
 import org.hnau.remotestate.RemoteCall
-import org.hnau.remotestate.RemoteFunction
-import org.hnau.remotestate.RemoteFunctionSerializer
-import org.hnau.remotestate.RemoteJson
 import org.hnau.remotestate.RemotePath
 import org.hnau.remotestate.RemoteServerMessage
-import org.hnau.remotestate.RemoteState
-import org.hnau.remotestate.RemoteStateSerializer
+import org.hnau.remotestate.fold
 
 class RemoteCallException(
     val error: CallError,
@@ -25,9 +27,10 @@ class RemoteCallException(
 class RemoteConnectionClosedException : Exception("Connection closed")
 
 internal class RemoteClientSession<T>(
+    private val scope: CoroutineScope,
     private val rootSerializer: KSerializer<T>,
     private val send: (RemoteCall) -> Unit,
-) : RemoteTreeDecodeContext {
+) {
 
     private val callsMutex = Mutex()
 
@@ -35,34 +38,48 @@ internal class RemoteClientSession<T>(
 
     private var closedCause: Throwable? = null
 
-    private val callIdFactory: IdFactory<CallId> = CallId.createFactory()
+    private val lastCallId: AtomicLong = AtomicLong(0)
 
     val root: CompletableDeferred<T> = CompletableDeferred()
 
-    private val states: MutableMap<RemotePath, (JsonElement) -> Unit> = hashMapOf(
-        RemotePath.root to { element ->
-            check(root.complete(decodeTree(RemotePath.root, rootSerializer, element))) {
-                "Root is already received"
-            }
-        }
-    )
+    private var rootUpdates: SendChannel<RemoteUpdate>? = null
 
     suspend fun handle(
         message: RemoteServerMessage,
     ) {
-        when (message) {
-            is RemoteServerMessage.Update -> states[message.path]?.let { update ->
-                disposeInside(message.path)
-                update(message.value)
-            }
+        message.fold(
+            ifUpdate = { path, value ->
+                rootUpdates
+                    ?.trySend(path to value)
+                    ?: run {
+                        check(path == RemotePath.root) { "Expected root, got update for $path" }
+                        createRoot(value)
+                    }
+            },
+            ifCallResult = { callId, result ->
+                completeCall(callId) {
+                    result.fold(
+                        ifLeft = { error -> completeExceptionally(RemoteCallException(error)) },
+                        ifRight = { value -> complete(value) },
+                    )
+                }
+            },
+        )
+    }
 
-            is RemoteServerMessage.CallResult -> completeCall(message.callId) {
-                message.result.fold(
-                    ifLeft = { error -> completeExceptionally(RemoteCallException(error)) },
-                    ifRight = { value -> complete(value) },
-                )
-            }
-        }
+    private fun createRoot(
+        value: JsonElement,
+    ) {
+        val updates = Channel<RemoteUpdate>(Channel.UNLIMITED)
+        rootUpdates = updates
+        val state = receiveRemoteState(
+            scope = scope,
+            serializer = rootSerializer,
+            initial = value,
+            updates = updates,
+            call = ::call,
+        )
+        root.complete(state.value)
     }
 
     suspend fun close(
@@ -91,7 +108,7 @@ internal class RemoteClientSession<T>(
         path: RemotePath,
         argument: JsonElement,
     ): JsonElement {
-        val callId = callIdFactory.next()
+        val callId = CallId(lastCallId.incrementAndFetch())
         val deferred = CompletableDeferred<JsonElement>()
         callsMutex.withLock {
             closedCause?.let { throw it }
@@ -111,36 +128,5 @@ internal class RemoteClientSession<T>(
                 pendingCalls.remove(callId)
             }
         }
-    }
-
-    private fun disposeInside(
-        path: RemotePath,
-    ) {
-        states.keys.removeAll { it.isStrictlyInside(path) }
-    }
-
-    override fun <S> decodeState(
-        path: RemotePath,
-        serializer: RemoteStateSerializer<S>,
-        element: JsonElement,
-    ): RemoteState<S> {
-        val flow = MutableStateFlow(decodeTree(path, serializer.valueSerializer, element))
-        states[path] = { newElement ->
-            flow.value = decodeTree(path, serializer.valueSerializer, newElement)
-        }
-        return RemoteState(flow)
-    }
-
-    override fun <A, R> decodeFunction(
-        path: RemotePath,
-        serializer: RemoteFunctionSerializer<A, R>,
-    ): RemoteFunction<A, R> = RemoteFunction { argument ->
-        RemoteJson.decodeFromJsonElement(
-            deserializer = serializer.resultSerializer,
-            element = call(
-                path = path,
-                argument = RemoteJson.encodeToJsonElement(serializer.argumentSerializer, argument),
-            ),
-        )
     }
 }

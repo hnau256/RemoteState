@@ -14,7 +14,7 @@ Every remote value is addressed by its path in the tree, for example `loginState
 
 | Module   | Contents                                                                                                                |
 |----------|-------------------------------------------------------------------------------------------------------------------------|
-| `common` | `RemoteState`, `RemoteFunction`, ids, wire protocol. Depend on it from the module with your state classes.              |
+| `common` | `RemoteState`, `RemoteFunction`, `RemotePath`, wire protocol. Depend on it from the module with your state classes.   |
 | `server` | `Route.remoteState(...)`: a Ktor WebSocket route that serves the state tree.                                          |
 | `client` | `HttpClient.connectRemoteState(...)`: connects, reconnects and exposes the mirrored tree as a `StateFlow`.              |
 
@@ -152,14 +152,17 @@ Calls throw:
 
 The server encodes the state tree into JSON with its own encoder that tracks the path of every value:
 
-- A `RemoteState` at path `P` is written as its current value. The server registers a subscription at `P`.
-- A `RemoteFunction` at path `P` is written as `{}`. The server registers the lambda at `P`.
-- When the state at `P` changes, the server drops everything registered strictly inside `P`, encodes the
-  new value (registering what it contains) and sends it as an `update` for `P`.
+- A `RemoteState` is written as its current value. It becomes a separate node that encodes its own value,
+  watches its `StateFlow` and sends an `update` with its path when the value changes.
+- A `RemoteFunction` is written as `{}`. The node that contains it handles calls to its path.
+- Each node knows only paths relative to itself and keeps a tree of what it contains: functions and nested
+  states, keyed by path segments. A call is routed segment by segment down to the node that owns it.
+- When the value of a node changes, everything inside it is dropped and built again from the new value.
+  Nested states that did not change are not affected by updates of their siblings or their children.
 
-The client mirrors this. It decodes every `RemoteState` into a `MutableStateFlow` registered at its path,
-and turns every `RemoteFunction` into a lambda that sends a `call` with its path. An `update` for `P`
-replaces the value of the state at `P` and everything registered inside it.
+The client mirrors this. Every `RemoteState` becomes a node with its own `StateFlow` and a queue of updates.
+An `update` is routed segment by segment to the node at its path, and that node decodes the new value,
+rebuilding its nested states. Every `RemoteFunction` becomes a lambda that sends a `call` with its path.
 
 A call goes to whatever function is at its path at the moment the server receives it. If there is none,
 the call fails with `CallError.Outdated`. For example, removing a task twice fails the second time,
@@ -194,9 +197,9 @@ state rather than reading it right after a call.
 ## Notes and limitations
 
 - **Updates send the whole value of a state.** Split large states into nested `RemoteState`s.
+- **Map keys must be non-empty**, even in plain data, because every key is a potential path segment.
 - **Calls go to the current address.** If a key is reused, a call made from an old value reaches the new
   element with the same key.
 - **Function arguments and results** are plain data encoded with regular JSON. They cannot contain
   `RemoteState` or `RemoteFunction`.
-- **Every connection gets its own model tree.** If the application restores several connections from the
-  same stored skeleton, they may overwrite it.
+- **Every connection gets its own model tree.** `createRoot` is called for each connection.
