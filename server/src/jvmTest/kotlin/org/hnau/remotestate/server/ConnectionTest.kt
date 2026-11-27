@@ -22,7 +22,6 @@ import org.hnau.remotestate.common.RemoteFunction
 import org.hnau.remotestate.common.invoke
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 import io.ktor.client.engine.cio.CIO as ClientCIO
@@ -37,7 +36,7 @@ class ConnectionTest {
     )
 
     @Test
-    fun callsAreBoundToConnectionScope(): Unit = runBlocking {
+    fun pendingCallsAreCancelledOnDisconnect(): Unit = runBlocking {
         val hangStarted = CompletableDeferred<Unit>()
         val server = embeddedServer(CIO, port = 0) {
             install(ServerWebSockets)
@@ -67,10 +66,9 @@ class ConnectionTest {
                 val connected = state.filterIsInstance<ConnectionState.Connected<Root>>().first()
                 val root = connected.root
 
-                assertFailsWith<IllegalStateException> { root.ping() }
-                assertEquals("pong", connected.scope.async { root.ping() }.await())
+                assertEquals("pong", root.ping())
 
-                val hanging = connected.scope.async { root.hang() }
+                val hanging = async { root.hang() }
                 hangStarted.await()
                 server.stop(gracePeriodMillis = 0, timeoutMillis = 1000)
                 state.first { it is ConnectionState.Disconnected }

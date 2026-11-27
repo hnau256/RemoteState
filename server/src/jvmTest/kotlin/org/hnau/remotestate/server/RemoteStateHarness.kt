@@ -8,7 +8,6 @@ import io.ktor.server.engine.embeddedServer
 import io.ktor.server.routing.routing
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -44,7 +43,7 @@ fun <T> withRemoteState(
                 )
                 .filterIsInstance<ConnectionState.Connected<T>>()
                 .first()
-            connected.scope.async { block(connected.root) }.await()
+            block(connected.root)
         }
     } finally {
         connection.cancel()

@@ -17,8 +17,10 @@ Every remote value is addressed by its path in the tree, for example `loginState
 | `common` | `RemoteState`, `RemoteMap`, `RemoteFunction`, wire protocol. Depend on it from the module with your state classes. |
 | `server` | `Route.remoteState(...)`: a Ktor WebSocket route that serves the state tree.                                          |
 | `client` | `HttpClient.connectRemoteState(...)`: connects, reconnects and exposes the mirrored tree as a `StateFlow`.              |
+| `utils:core` | `RemoteCallError` and `toRemoteCallResult`: one error type for call errors and domain errors of a result.         |
+| `utils:ui` | Compose helpers on top of hnau commons: `ConnectionStateContent` for connection screens and `RemoteCallError.toBubble`. |
 
-All modules are multiplatform.
+All modules are multiplatform. `utils:ui` targets Android, desktop and wasm.
 
 ## Defining state
 
@@ -120,7 +122,7 @@ All work of one connection runs on a single-threaded dispatcher.
 ```kotlin
 val client = HttpClient(CIO) { install(WebSockets) }
 
-val connection: StateFlow<RemoteConnectionState<RootState>> = client.connectRemoteState(
+val connection: StateFlow<ConnectionState<RootState>> = client.connectRemoteState(
     scope = scope,
     url = "ws://localhost:8080/remote",
     serializer = RootState.serializer(),
@@ -130,13 +132,12 @@ val connection: StateFlow<RemoteConnectionState<RootState>> = client.connectRemo
 `ConnectionState` is one of:
 
 - `Connecting`;
-- `Connected(root, scope)`, which holds the mirrored root state and the scope of this connection;
+- `Connected(root)`, which holds the mirrored root state;
 - `Disconnected(cause, nextAttemptAt)`, which holds the reason and the time of the next reconnect attempt.
 
 The client reconnects automatically. The delay is a function of the number of consecutive failed
 attempts and defaults to `exponentialReconnectDelay()`: 1s, doubling, capped at 30s, reset after a
-successful connection. Every successful connection produces a new root and a new scope. The previous root
-stops updating, and its scope is cancelled.
+successful connection. Every successful connection produces a new root. The previous root stops updating.
 
 Using the mirrored state:
 
@@ -149,10 +150,9 @@ logged.addTask("Buy milk")
 logged.tasks.state.collect { tasks -> render(tasks.values) }
 ```
 
-Functions of a root must be called from the `scope` of its `Connected` state or from its child. A call from
-any other coroutine fails immediately with `IllegalStateException`, even while the connection is alive.
-When the connection is lost, the scope is cancelled before anything else, so calls in flight are cancelled
-together with their callers. A call never outlives its connection, and there is no separate error for it.
+A call never outlives its connection. When the connection is lost, calls in flight are cancelled: their callers
+get a `CancellationException`. A call made after that is cancelled immediately. There is no separate error for
+a lost connection.
 
 Calls throw `RemoteCallException` with a `CallError`:
 

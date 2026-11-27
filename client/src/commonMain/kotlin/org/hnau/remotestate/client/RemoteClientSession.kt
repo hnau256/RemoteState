@@ -2,6 +2,7 @@
 
 package org.hnau.remotestate.client
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -15,6 +16,7 @@ import org.hnau.remotestate.common.CallId
 import org.hnau.remotestate.common.RemoteCall
 import org.hnau.remotestate.common.RemotePath
 import org.hnau.remotestate.common.RemoteServerMessage
+import org.hnau.commons.kotlin.foldNullable
 import org.hnau.remotestate.common.fold
 import kotlin.concurrent.atomics.AtomicLong
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
@@ -31,6 +33,8 @@ internal class RemoteClientSession<T>(
     private val callsMutex = Mutex()
 
     private val pendingCalls: MutableMap<CallId, CompletableDeferred<JsonElement>> = HashMap()
+
+    private var closeCause: Throwable? = null
 
     private val lastCallId: AtomicLong = AtomicLong(0)
 
@@ -80,10 +84,21 @@ internal class RemoteClientSession<T>(
         root.complete(state.value)
     }
 
-    fun close(
+    suspend fun close(
         cause: Throwable,
     ) {
         root.completeExceptionally(cause)
+        callsMutex.withLock {
+            closeCause = cause
+            pendingCalls.values.forEach { deferred -> deferred.cancelBecauseClosed(cause) }
+            pendingCalls.clear()
+        }
+    }
+
+    private fun CompletableDeferred<JsonElement>.cancelBecauseClosed(
+        cause: Throwable,
+    ) {
+        cancel(CancellationException("Connection closed", cause))
     }
 
     private suspend fun completeCall(
@@ -102,7 +117,10 @@ internal class RemoteClientSession<T>(
         val callId = CallId(lastCallId.incrementAndFetch())
         val deferred = CompletableDeferred<JsonElement>()
         callsMutex.withLock {
-            pendingCalls[callId] = deferred
+            closeCause.foldNullable(
+                ifNull = { pendingCalls[callId] = deferred },
+                ifNotNull = { cause -> deferred.cancelBecauseClosed(cause) },
+            )
         }
         try {
             send(
