@@ -4,7 +4,9 @@ import org.hnau.commons.gen.fold.annotations.Fold
 import org.hnau.commons.kotlin.it
 import kotlin.time.Instant
 
-@Fold
+@Fold(
+    ordinal = true,
+)
 sealed interface ConnectionState<out T> {
 
     data object Connecting : ConnectionState<Nothing>
