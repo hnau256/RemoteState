@@ -17,6 +17,8 @@ import kotlinx.serialization.modules.SerializersModule
 import org.hnau.remotestate.common.RemoteFunction
 import org.hnau.remotestate.common.RemoteFunctionSerializer
 import org.hnau.remotestate.common.RemoteJson
+import org.hnau.remotestate.common.RemoteMap
+import org.hnau.remotestate.common.RemoteMapSerializer
 import org.hnau.remotestate.common.RemotePath
 import org.hnau.remotestate.common.RemotePathSegment
 import org.hnau.remotestate.common.RemoteState
@@ -28,6 +30,12 @@ internal interface RemoteTreeEncodeContext {
         path: RemotePath,
         serializer: RemoteStateSerializer<T>,
         state: RemoteState<T>,
+    ): JsonElement
+
+    fun encodeMap(
+        path: RemotePath,
+        serializer: RemoteMapSerializer<*, *>,
+        map: RemoteMap<*, *>,
     ): JsonElement
 
     fun <A, R> encodeFunction(
@@ -77,6 +85,14 @@ private abstract class TreeEncoder(
                     path = remoteElementPath(),
                     serializer = serializer as RemoteStateSerializer<Any?>,
                     state = value as RemoteState<Any?>,
+                )
+            )
+
+            is RemoteMapSerializer<*, *> -> put(
+                context.encodeMap(
+                    path = remoteElementPath(),
+                    serializer = serializer,
+                    map = value as RemoteMap<*, *>,
                 )
             )
 

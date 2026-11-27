@@ -10,6 +10,8 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import org.hnau.remotestate.common.RemoteFunction
 import org.hnau.remotestate.common.RemoteFunctionSerializer
+import org.hnau.remotestate.common.RemoteMap
+import org.hnau.remotestate.common.RemoteMapSerializer
 import org.hnau.remotestate.common.RemotePath
 import org.hnau.remotestate.common.RemoteState
 import org.hnau.remotestate.common.RemoteStateSerializer
@@ -37,6 +39,15 @@ class RemoteTreeEncoderTest {
         ): JsonElement {
             paths += path.toString()
             return JsonPrimitive("state")
+        }
+
+        override fun encodeMap(
+            path: RemotePath,
+            serializer: RemoteMapSerializer<*, *>,
+            map: RemoteMap<*, *>,
+        ): JsonElement {
+            paths += path.toString()
+            return JsonObject(emptyMap())
         }
 
         override fun <A, R> encodeFunction(

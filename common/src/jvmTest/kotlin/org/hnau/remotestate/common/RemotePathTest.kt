@@ -1,8 +1,5 @@
-package org.hnau.remotestate.server
+package org.hnau.remotestate.common
 
-import org.hnau.remotestate.common.RemoteJson
-import org.hnau.remotestate.common.RemotePath
-import org.hnau.remotestate.common.RemotePathSegment
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith

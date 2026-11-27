@@ -59,16 +59,19 @@ internal class RemoteServerSession private constructor(
             serializer: KSerializer<T>,
             root: T,
         ): RemoteServerSession {
-            val sendUpdate = { path: RemotePath, value: JsonElement ->
-                sendMessage(RemoteServerMessage.Update(path = path, value = value))
-            }
             val served = serveRemoteState(
                 scope = scope,
                 serializer = serializer,
                 state = MutableStateFlow(root),
-                sendUpdate = sendUpdate,
+                send = { path, value ->
+                    sendMessage(
+                        value
+                            ?.let { RemoteServerMessage.Update(path = path, value = it) }
+                            ?: RemoteServerMessage.Remove(path = path)
+                    )
+                },
             )
-            sendUpdate(RemotePath.root, served.initial)
+            sendMessage(RemoteServerMessage.Update(path = RemotePath.root, value = served.initial))
             return RemoteServerSession(
                 scope = scope,
                 sendMessage = sendMessage,

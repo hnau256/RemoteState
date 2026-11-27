@@ -30,6 +30,12 @@ sealed interface RemoteServerMessage {
     ) : RemoteServerMessage
 
     @Serializable
+    @SerialName("remove")
+    data class Remove(
+        val path: RemotePath,
+    ) : RemoteServerMessage
+
+    @Serializable
     @SerialName("call_result")
     data class CallResult(
         val callId: CallId,

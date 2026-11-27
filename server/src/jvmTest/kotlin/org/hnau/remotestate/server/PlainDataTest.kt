@@ -4,30 +4,14 @@ import arrow.core.Either
 import arrow.core.left
 import arrow.core.right
 import arrow.core.serialization.EitherSerializer
-import io.ktor.client.HttpClient
-import io.ktor.client.plugins.websocket.WebSockets
-import io.ktor.server.cio.CIO
-import io.ktor.server.engine.embeddedServer
-import io.ktor.server.application.install
-import io.ktor.server.routing.routing
-import io.ktor.server.websocket.WebSockets as ServerWebSockets
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.Serializable
 import org.hnau.remotestate.common.RemoteState
-import org.hnau.remotestate.client.RemoteConnectionState
-import org.hnau.remotestate.client.connectRemoteState
 import org.hnau.remotestate.common.toRemoteState
 import kotlin.jvm.JvmInline
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.time.Duration.Companion.seconds
-import io.ktor.client.engine.cio.CIO as ClientCIO
 
 class PlainDataTest {
 
@@ -97,36 +81,15 @@ class PlainDataTest {
     )
 
     @Test
-    fun plainDataSurvivesRoundTrip(): Unit = runBlocking {
+    fun plainDataSurvivesRoundTrip() {
         val data = MutableStateFlow(first)
-        val server = embeddedServer(CIO, port = 0) {
-            install(ServerWebSockets)
-            routing {
-                remoteState(path = "/remote", serializer = Root.serializer()) { Root(data.toRemoteState()) }
-            }
-        }.start()
-        val port = server.engine.resolvedConnectors().first().port
-        val client = HttpClient(ClientCIO) { install(WebSockets) }
-        val connection = Job(coroutineContext[Job])
-        try {
-            withTimeout(10.seconds) {
-                val root = client
-                    .connectRemoteState(
-                        scope = CoroutineScope(coroutineContext + connection),
-                        url = "ws://localhost:$port/remote",
-                        serializer = Root.serializer(),
-                    )
-                    .filterIsInstance<RemoteConnectionState.Connected<Root>>()
-                    .first()
-                    .root
-                assertEquals(first, root.data.state.value)
-                data.value = second
-                assertEquals(second, root.data.state.first { it != first })
-            }
-        } finally {
-            connection.cancel()
-            client.close()
-            server.stop()
+        withRemoteState(
+            serializer = Root.serializer(),
+            createRoot = { Root(data.toRemoteState()) },
+        ) { root ->
+            assertEquals(first, root.data.state.value)
+            data.value = second
+            assertEquals(second, root.data.state.first { it != first })
         }
     }
 }

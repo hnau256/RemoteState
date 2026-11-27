@@ -50,11 +50,15 @@ internal class RemoteClientSession<T>(
         message.fold(
             ifUpdate = { path, value ->
                 rootUpdates
-                    ?.trySend(path to value)
+                    ?.trySend(RemoteUpdate(path, value))
                     ?: run {
                         check(path == RemotePath.root) { "Expected root, got update for $path" }
                         createRoot(value)
                     }
+            },
+            ifRemove = { path ->
+                val updates = rootUpdates ?: error("Remove of $path was received before root")
+                updates.trySend(RemoteUpdate(path, null))
             },
             ifCallResult = { callId, result ->
                 completeCall(callId) {
