@@ -13,7 +13,6 @@ import org.hnau.commons.kotlin.coroutines.flow.state.mapListReusable
 import org.hnau.commons.kotlin.coroutines.flow.state.mapState
 import org.hnau.commons.kotlin.coroutines.flow.state.mapWithScope
 import org.hnau.commons.kotlin.foldBoolean
-import org.hnau.remotestate.client.ClientCallError
 import org.hnau.remotestate.client.invokeCatching
 import org.hnau.remotestate.common.CallError
 import org.hnau.remotestate.common.RemoteFunction
@@ -114,7 +113,7 @@ class LoginScenarioTest {
         assertTrue(anonymous.login("password"))
 
         val logged = root.loginState.state.first { it.isRight() }.getOrNull()!!
-        assertEquals(ClientCallError.Server(CallError.Outdated).left(), anonymous.login.invokeCatching("password"))
+        assertEquals(CallError.Outdated.left(), anonymous.login.invokeCatching("password"))
 
         logged.addTask("first")
         logged.addTask("second")
@@ -125,10 +124,10 @@ class LoginScenarioTest {
         first.remove()
         val remaining = logged.tasks.state.first { it.size == 1 }.values.single()
         assertEquals("second", remaining.title)
-        assertEquals(ClientCallError.Server(CallError.Outdated).left(), first.remove.invokeCatching())
+        assertEquals(CallError.Outdated.left(), first.remove.invokeCatching())
 
         logged.logout()
         root.loginState.state.first { it.isLeft() }
-        assertEquals(ClientCallError.Server(CallError.Outdated).left(), logged.addTask.invokeCatching("third"))
+        assertEquals(CallError.Outdated.left(), logged.addTask.invokeCatching("third"))
     }
 }

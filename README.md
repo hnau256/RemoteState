@@ -130,13 +130,13 @@ val connection: StateFlow<RemoteConnectionState<RootState>> = client.connectRemo
 `RemoteConnectionState` is one of:
 
 - `Connecting`;
-- `Connected(root)`, which holds the mirrored root state;
+- `Connected(root, scope)`, which holds the mirrored root state and the scope of this connection;
 - `Disconnected(cause, nextAttemptAt)`, which holds the reason and the time of the next reconnect attempt.
 
 The client reconnects automatically. The delay is a function of the number of consecutive failed
 attempts and defaults to `exponentialReconnectDelay()`: 1s, doubling, capped at 30s, reset after a
-successful connection. Every successful connection produces a new root. The previous root stops
-updating, and calls on it fail.
+successful connection. Every successful connection produces a new root and a new scope. The previous root
+stops updating, and its scope is cancelled.
 
 Using the mirrored state:
 
@@ -149,14 +149,17 @@ logged.addTask("Buy milk")
 logged.tasks.state.collect { tasks -> render(tasks.values) }
 ```
 
-Calls throw `RemoteCallException` with a `ClientCallError`:
+Functions of a root must be called from the `scope` of its `Connected` state or from its child. A call from
+any other coroutine fails immediately with `IllegalStateException`, even while the connection is alive.
+When the connection is lost, the scope is cancelled before anything else, so calls in flight are cancelled
+together with their callers. A call never outlives its connection, and there is no separate error for it.
 
-- `Server(CallError.Outdated)` if there is no function at its path anymore (see below);
-- `Server(CallError.Internal)` if it threw on the server;
-- `Disconnected` if the connection was lost before the result arrived. The call may or may not have been
-  executed.
+Calls throw `RemoteCallException` with a `CallError`:
 
-`invokeCatching` returns the same errors as `Either<ClientCallError, R>` instead of throwing:
+- `Outdated` if there is no function at its path anymore (see below);
+- `Internal` if it threw on the server.
+
+`invokeCatching` returns the same errors as `Either<CallError, R>` instead of throwing:
 
 ```kotlin
 logged.addTask.invokeCatching("Buy milk").fold(

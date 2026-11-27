@@ -9,6 +9,7 @@ import io.ktor.server.routing.routing
 import io.ktor.server.websocket.WebSockets as ServerWebSockets
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
@@ -35,7 +36,7 @@ fun <T> withRemoteState(
     val connection = Job(coroutineContext[Job])
     try {
         withTimeout(20.seconds) {
-            val root = client
+            val connected = client
                 .connectRemoteState(
                     scope = CoroutineScope(coroutineContext + connection),
                     url = "ws://localhost:$port/remote",
@@ -43,8 +44,7 @@ fun <T> withRemoteState(
                 )
                 .filterIsInstance<RemoteConnectionState.Connected<T>>()
                 .first()
-                .root
-            block(root)
+            connected.scope.async { block(connected.root) }.await()
         }
     } finally {
         connection.cancel()

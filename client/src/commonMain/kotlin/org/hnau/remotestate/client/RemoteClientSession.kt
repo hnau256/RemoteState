@@ -1,9 +1,13 @@
-@file:OptIn(ExperimentalAtomicApi::class)
+@file:OptIn(ExperimentalAtomicApi::class, ExperimentalCoroutinesApi::class)
 
 package org.hnau.remotestate.client
 
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.SendChannel
 import kotlinx.coroutines.sync.Mutex
@@ -31,8 +35,6 @@ internal class RemoteClientSession<T>(
 
     private val pendingCalls: MutableMap<CallId, CompletableDeferred<JsonElement>> = HashMap()
 
-    private var closed: Boolean = false
-
     private val lastCallId: AtomicLong = AtomicLong(0)
 
     val root: CompletableDeferred<T> = CompletableDeferred()
@@ -58,7 +60,7 @@ internal class RemoteClientSession<T>(
             ifCallResult = { callId, result ->
                 completeCall(callId) {
                     result.fold(
-                        ifLeft = { error -> completeExceptionally(RemoteCallException(ClientCallError.Server(error))) },
+                        ifLeft = { error -> completeExceptionally(RemoteCallException(error)) },
                         ifRight = { value -> complete(value) },
                     )
                 }
@@ -81,15 +83,10 @@ internal class RemoteClientSession<T>(
         root.complete(state.value)
     }
 
-    suspend fun close(
+    fun close(
         cause: Throwable,
     ) {
         root.completeExceptionally(cause)
-        val calls = callsMutex.withLock {
-            closed = true
-            pendingCalls.values.toList().also { pendingCalls.clear() }
-        }
-        calls.forEach { it.completeExceptionally(RemoteCallException(ClientCallError.Disconnected)) }
     }
 
     private suspend fun completeCall(
@@ -105,12 +102,10 @@ internal class RemoteClientSession<T>(
         path: RemotePath,
         argument: JsonElement,
     ): JsonElement {
+        checkCaller()
         val callId = CallId(lastCallId.incrementAndFetch())
         val deferred = CompletableDeferred<JsonElement>()
         callsMutex.withLock {
-            if (closed) {
-                throw RemoteCallException(ClientCallError.Disconnected)
-            }
             pendingCalls[callId] = deferred
         }
         try {
@@ -126,6 +121,14 @@ internal class RemoteClientSession<T>(
             callsMutex.withLock {
                 pendingCalls.remove(callId)
             }
+        }
+    }
+
+    private suspend fun checkCaller() {
+        val connection = scope.coroutineContext.job
+        val caller = currentCoroutineContext()[Job]
+        check(generateSequence(caller, Job::parent).any { it == connection }) {
+            "RemoteFunction must be called from RemoteConnectionState.Connected.scope or its child"
         }
     }
 }

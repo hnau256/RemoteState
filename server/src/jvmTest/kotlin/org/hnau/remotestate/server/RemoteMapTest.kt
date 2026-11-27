@@ -5,7 +5,6 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.serialization.Serializable
-import org.hnau.remotestate.client.ClientCallError
 import org.hnau.remotestate.client.invokeCatching
 import org.hnau.remotestate.common.CallError
 import org.hnau.remotestate.common.RemoteFunction
@@ -87,6 +86,6 @@ class RemoteMapTest {
         assertSame(a, renamed.getValue(1.0))
 
         val b = inserted.getValue(1.5)
-        assertEquals(ClientCallError.Server(CallError.Outdated).left(), b.increment.invokeCatching())
+        assertEquals(CallError.Outdated.left(), b.increment.invokeCatching())
     }
 }

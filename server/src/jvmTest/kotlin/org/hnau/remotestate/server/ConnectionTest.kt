@@ -1,6 +1,5 @@
 package org.hnau.remotestate.server
 
-import arrow.core.left
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.server.application.install
@@ -8,21 +7,24 @@ import io.ktor.server.cio.CIO
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.routing.routing
 import io.ktor.server.websocket.WebSockets as ServerWebSockets
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.Serializable
-import org.hnau.remotestate.client.ClientCallError
 import org.hnau.remotestate.client.RemoteConnectionState
 import org.hnau.remotestate.client.connectRemoteState
-import org.hnau.remotestate.client.invokeCatching
 import org.hnau.remotestate.common.RemoteFunction
 import org.hnau.remotestate.common.invoke
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 import io.ktor.client.engine.cio.CIO as ClientCIO
 
@@ -31,14 +33,24 @@ class ConnectionTest {
     @Serializable
     data class Root(
         val ping: RemoteFunction<Unit, String>,
+        val hang: RemoteFunction<Unit, Unit>,
     )
 
     @Test
-    fun callsFailAfterDisconnection(): Unit = runBlocking {
+    fun callsAreBoundToConnectionScope(): Unit = runBlocking {
+        val hangStarted = CompletableDeferred<Unit>()
         val server = embeddedServer(CIO, port = 0) {
             install(ServerWebSockets)
             routing {
-                remoteState(path = "/remote", serializer = Root.serializer()) { Root(ping = { "pong" }) }
+                remoteState(path = "/remote", serializer = Root.serializer()) {
+                    Root(
+                        ping = { "pong" },
+                        hang = {
+                            hangStarted.complete(Unit)
+                            awaitCancellation()
+                        },
+                    )
+                }
             }
         }.start()
         val port = server.engine.resolvedConnectors().first().port
@@ -52,12 +64,18 @@ class ConnectionTest {
                     serializer = Root.serializer(),
                 )
                 assertEquals(RemoteConnectionState.Connecting, state.value)
-                val root = state.filterIsInstance<RemoteConnectionState.Connected<Root>>().first().root
-                assertEquals("pong", root.ping())
+                val connected = state.filterIsInstance<RemoteConnectionState.Connected<Root>>().first()
+                val root = connected.root
 
+                assertFailsWith<IllegalStateException> { root.ping() }
+                assertEquals("pong", connected.scope.async { root.ping() }.await())
+
+                val hanging = connected.scope.async { root.hang() }
+                hangStarted.await()
                 server.stop(gracePeriodMillis = 0, timeoutMillis = 1000)
                 state.first { it is RemoteConnectionState.Disconnected }
-                assertEquals(ClientCallError.Disconnected.left(), root.ping.invokeCatching())
+                hanging.join()
+                assertTrue(hanging.isCancelled)
             }
         } finally {
             connection.cancel()

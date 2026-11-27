@@ -41,9 +41,9 @@ fun <T> HttpClient.connectRemoteState(
                 scope = this,
                 url = url,
                 serializer = serializer,
-                onRoot = { root ->
+                onRoot = { root, rootScope ->
                     failedAttempts = 0
-                    connectionState.value = RemoteConnectionState.Connected(root)
+                    connectionState.value = RemoteConnectionState.Connected(root, rootScope)
                 },
             )
             failedAttempts++
@@ -62,7 +62,7 @@ private suspend fun <T> HttpClient.runConnection(
     scope: CoroutineScope,
     url: String,
     serializer: KSerializer<T>,
-    onRoot: (T) -> Unit,
+    onRoot: (root: T, scope: CoroutineScope) -> Unit,
 ): Throwable {
     val socket = try {
         webSocketSession(urlString = url)
@@ -94,7 +94,7 @@ private suspend fun <T> HttpClient.runConnection(
                 }
             }
             val rootWaiter = launch {
-                onRoot(session.root.await())
+                onRoot(session.root.await(), connectionScope)
             }
             for (frame in socket.incoming) {
                 val text = (frame as? Frame.Text)?.readText() ?: continue
