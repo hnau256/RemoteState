@@ -3,38 +3,40 @@ package org.hnau.remotestate.common
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.KSerializer
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 
-abstract class RemoteState<out T>(
+@Serializable(with = RemoteStateSerializer::class)
+class RemoteState<out T>(
     val state: StateFlow<T>,
 )
 
-abstract class RemoteStatePatcher<S : RemoteState<T>, T, P>(
+fun <T> StateFlow<T>.toRemoteState(): RemoteState<T> = RemoteState(
+    state = this,
+)
+
+class RemoteStateSerializer<T>(
     val valueSerializer: KSerializer<T>,
-    val patchSerializer: KSerializer<P>,
-    val diff: (old: T, new: T) -> P,
-    val apply: (value: T, patch: P) -> T,
-    val create: (state: StateFlow<T>) -> S,
-) : KSerializer<S> {
+) : KSerializer<RemoteState<T>> {
 
     @OptIn(ExperimentalSerializationApi::class)
     override val descriptor: SerialDescriptor = SerialDescriptor(
-        serialName = "${this::class.simpleName ?: "RemoteState"}<${valueSerializer.descriptor.serialName}>",
+        serialName = "RemoteState<${valueSerializer.descriptor.serialName}>",
         original = valueSerializer.descriptor,
     )
 
     override fun serialize(
         encoder: Encoder,
-        value: S,
+        value: RemoteState<T>,
     ) {
         throw outsideOfSessionException()
     }
 
     override fun deserialize(
         decoder: Decoder,
-    ): S = throw outsideOfSessionException()
+    ): RemoteState<T> = throw outsideOfSessionException()
 }
 
 internal fun outsideOfSessionException(): IllegalStateException =

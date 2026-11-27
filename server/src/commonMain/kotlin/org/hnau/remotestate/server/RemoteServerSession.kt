@@ -8,15 +8,14 @@ import kotlinx.coroutines.launch
 import kotlinx.serialization.KSerializer
 import org.hnau.remotestate.common.CallError
 import org.hnau.remotestate.common.RemoteCall
+import org.hnau.remotestate.common.RemotePath
 import org.hnau.remotestate.common.RemoteServerMessage
-import org.hnau.remotestate.common.SnapshotRemoteState
-import org.hnau.remotestate.common.encodeRemoteValue
 
 internal class RemoteServerSession private constructor(
     private val scope: CoroutineScope,
     private val sendMessage: (RemoteServerMessage) -> Unit,
     private val onError: (Throwable) -> Unit,
-    private val root: RemoteServerNode<*, *>,
+    private val root: RemoteServerNode<*>,
 ) {
 
     fun handle(
@@ -59,16 +58,15 @@ internal class RemoteServerSession private constructor(
             serializer: KSerializer<T>,
             root: T,
         ): RemoteServerSession {
-            val encoded = encodeRemoteValue(serializer, root)
-            sendMessage(RemoteServerMessage.Init(encoded.element))
             val node = RemoteServerNode(
                 scope = scope,
-                patcher = SnapshotRemoteState.Patcher(serializer),
+                serializer = serializer,
                 state = MutableStateFlow(root),
-                initial = root,
-                known = encoded.states,
-                send = { path, patch -> sendMessage(RemoteServerMessage.Patch(path = path, patch = patch)) },
+                send = { path, patch, states ->
+                    sendMessage(RemoteServerMessage.Update(path = path, patch = patch, states = states))
+                },
             )
+            sendMessage(RemoteServerMessage.Update(path = RemotePath.root, patch = emptyList(), states = node.states))
             return RemoteServerSession(
                 scope = scope,
                 sendMessage = sendMessage,

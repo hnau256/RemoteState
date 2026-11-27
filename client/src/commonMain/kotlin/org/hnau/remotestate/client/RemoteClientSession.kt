@@ -16,7 +16,6 @@ import org.hnau.remotestate.common.CallId
 import org.hnau.remotestate.common.RemoteCall
 import org.hnau.remotestate.common.RemotePath
 import org.hnau.remotestate.common.RemoteServerMessage
-import org.hnau.remotestate.common.SnapshotRemoteState
 import org.hnau.remotestate.common.fold
 
 class RemoteCallException(
@@ -39,26 +38,16 @@ internal class RemoteClientSession<T>(
 
     val root: CompletableDeferred<T> = CompletableDeferred()
 
-    private var rootNode: RemoteClientNode<T, T>? = null
+    private var rootNode: RemoteClientNode<T>? = null
 
     suspend fun handle(
         message: RemoteServerMessage,
     ) {
         message.fold(
-            ifInit = { value ->
-                check(rootNode == null) { "Root was already received" }
-                val node = RemoteClientNode(
-                    scope = scope,
-                    patcher = SnapshotRemoteState.Patcher(rootSerializer),
-                    initial = value,
-                    call = ::call,
-                )
-                rootNode = node
-                root.complete(node.state.value)
-            },
-            ifPatch = { path, patch ->
-                val node = rootNode ?: error("Patch for $path was received before root")
-                node.updates.trySend(path to patch)
+            ifUpdate = { path, patch, states ->
+                rootNode
+                    ?.update(path, patch, states)
+                    ?: createRoot(path, states)
             },
             ifCallResult = { callId, result ->
                 completeCall(callId) {
@@ -69,6 +58,22 @@ internal class RemoteClientSession<T>(
                 }
             },
         )
+    }
+
+    private fun createRoot(
+        path: RemotePath,
+        states: Map<RemotePath, JsonElement>,
+    ) {
+        check(path == RemotePath.root) { "Expected root, got update for $path" }
+        val node = RemoteClientNode(
+            scope = scope,
+            serializer = rootSerializer,
+            initial = states[RemotePath.root] ?: error("Root state was not received"),
+            states = states - RemotePath.root,
+            call = ::call,
+        )
+        rootNode = node
+        root.complete(node.state.value)
     }
 
     suspend fun close(

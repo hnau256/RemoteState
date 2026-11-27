@@ -10,9 +10,7 @@ import org.hnau.commons.kotlin.coroutines.flow.state.mapState
 import org.hnau.commons.kotlin.coroutines.flow.state.mapWithScope
 import org.hnau.commons.kotlin.coroutines.flow.state.mutable.toMutableStateFlowAsInitial
 import org.hnau.commons.kotlin.foldBoolean
-import org.hnau.commons.kotlin.KeyValue
-import org.hnau.remotestate.common.toKeyedListRemoteState
-import org.hnau.remotestate.common.toSnapshotRemoteState
+import org.hnau.remotestate.common.toRemoteState
 
 class TaskModel(
     title: String,
@@ -44,8 +42,8 @@ class LoggedModel(
                     remove = { tasksTitles.update { titles -> titles.filter { it != title } } },
                 ).state
             }
-            .mapState(scope) { tasks -> tasks.map { task -> KeyValue(task.title, task) } }
-            .toKeyedListRemoteState(),
+            .mapState(scope) { tasks -> tasks.associateBy(TaskState::title) }
+            .toRemoteState(),
         addTask = { title -> tasksTitles.update { it + title } },
         logout = { logout() },
     )
@@ -97,6 +95,6 @@ class RootModel(
                     },
                 )
             }
-            .toSnapshotRemoteState(),
+            .toRemoteState(),
     )
 }

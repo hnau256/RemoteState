@@ -42,6 +42,19 @@ value class RemotePath(
         .firstOrNull()
         ?.let { head -> head to RemotePath(segments.drop(1)) }
 
+    fun splitLast(): Pair<RemotePath, RemotePathSegment>? = segments
+        .lastOrNull()
+        ?.let { last -> RemotePath(segments.dropLast(1)) to last }
+
+    fun startsWith(
+        prefix: RemotePath,
+    ): Boolean = segments.size >= prefix.segments.size &&
+            segments.subList(0, prefix.segments.size) == prefix.segments
+
+    fun removePrefix(
+        prefix: RemotePath,
+    ): RemotePath = RemotePath(segments.drop(prefix.segments.size))
+
     override fun toString(): String = stringMapper.reverse(this)
 
     object Serializer : MappingKSerializer<String, RemotePath>(

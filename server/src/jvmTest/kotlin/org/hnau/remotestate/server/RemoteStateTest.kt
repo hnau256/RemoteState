@@ -82,11 +82,11 @@ class RemoteStateTest {
                     logged.addTask("first")
                     logged.addTask("second")
                     val tasks = logged.tasks.state.first { it.size == 2 }
-                    assertEquals(listOf("first", "second"), tasks.map { it.value.title })
+                    assertEquals(listOf("first", "second"), tasks.values.map(TaskState::title))
 
-                    val first = tasks.first { it.key == "first" }.value
+                    val first = tasks.getValue("first")
                     first.remove()
-                    val remaining = logged.tasks.state.first { it.size == 1 }.single().value
+                    val remaining = logged.tasks.state.first { it.size == 1 }.values.single()
                     assertEquals("second", remaining.title)
                     assertFailsWith<RemoteCallException> { first.remove() }
                     remaining.remove()

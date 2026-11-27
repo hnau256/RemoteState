@@ -19,10 +19,10 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.Serializable
-import org.hnau.remotestate.common.SnapshotRemoteState
+import org.hnau.remotestate.common.RemoteState
 import org.hnau.remotestate.client.RemoteConnectionState
 import org.hnau.remotestate.client.connectRemoteState
-import org.hnau.remotestate.common.toSnapshotRemoteState
+import org.hnau.remotestate.common.toRemoteState
 import kotlin.jvm.JvmInline
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -69,7 +69,7 @@ class PlainDataTest {
 
     @Serializable
     data class Root(
-        val data: SnapshotRemoteState<Data>,
+        val data: RemoteState<Data>,
     )
 
     private val first = Data(
@@ -102,7 +102,7 @@ class PlainDataTest {
         val server = embeddedServer(CIO, port = 0) {
             install(ServerWebSockets)
             routing {
-                remoteState(path = "/remote", serializer = Root.serializer()) { Root(data.toSnapshotRemoteState()) }
+                remoteState(path = "/remote", serializer = Root.serializer()) { Root(data.toRemoteState()) }
             }
         }.start()
         val port = server.engine.resolvedConnectors().first().port

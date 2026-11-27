@@ -4,8 +4,7 @@ import arrow.core.Either
 import kotlinx.serialization.Serializable
 import arrow.core.serialization.EitherSerializer
 import org.hnau.remotestate.common.RemoteFunction
-import org.hnau.remotestate.common.KeyedListRemoteState
-import org.hnau.remotestate.common.SnapshotRemoteState
+import org.hnau.remotestate.common.RemoteState
 
 @Serializable
 data class TaskState(
@@ -15,7 +14,7 @@ data class TaskState(
 
 @Serializable
 data class LoggedState(
-    val tasks: KeyedListRemoteState<String, TaskState>,
+    val tasks: RemoteState<Map<String, TaskState>>,
     val addTask: RemoteFunction<String, Unit>,
     val logout: RemoteFunction<Unit, Unit>,
 )
@@ -27,6 +26,6 @@ data class AnonymousState(
 
 @Serializable
 data class RootState(
-    val loginState: SnapshotRemoteState<@Serializable(with = EitherSerializer::class) Either<AnonymousState, LoggedState>>,
+    val loginState: RemoteState<@Serializable(with = EitherSerializer::class) Either<AnonymousState, LoggedState>>,
 )
 

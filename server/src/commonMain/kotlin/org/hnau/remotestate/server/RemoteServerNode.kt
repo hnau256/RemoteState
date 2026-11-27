@@ -4,138 +4,168 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
 import org.hnau.commons.kotlin.coroutines.createChild
+import org.hnau.remotestate.common.JsonOperation
 import org.hnau.remotestate.common.RemoteFunction
-import org.hnau.remotestate.common.RemoteFunctionEntry
 import org.hnau.remotestate.common.RemoteFunctionSerializer
 import org.hnau.remotestate.common.RemoteJson
 import org.hnau.remotestate.common.RemotePath
 import org.hnau.remotestate.common.RemoteState
-import org.hnau.remotestate.common.RemoteStateEntry
-import org.hnau.remotestate.common.RemoteStatePatcher
+import org.hnau.remotestate.common.RemoteStateSerializer
 import org.hnau.remotestate.common.RemoteTree
-import org.hnau.remotestate.common.encodeRemoteValue
+import org.hnau.remotestate.common.RemoteTreeEncodeContext
+import org.hnau.remotestate.common.diffJson
+import org.hnau.remotestate.common.encodeTree
 import org.hnau.remotestate.common.find
-import org.hnau.remotestate.common.walkTree
 
 internal typealias RemoteCallable = suspend (argument: JsonElement) -> JsonElement
 
 private typealias RemoteHandler = (rest: RemotePath) -> RemoteCallable?
 
-internal class RemoteServerNode<T, P>(
+internal typealias RemoteUpdateSender = (
+    path: RemotePath,
+    patch: List<JsonOperation>,
+    states: Map<RemotePath, JsonElement>,
+) -> Unit
+
+internal class RemoteServerNode<T>(
     private val scope: CoroutineScope,
-    private val patcher: RemoteStatePatcher<*, T, P>,
+    private val serializer: KSerializer<T>,
     state: StateFlow<T>,
-    initial: T,
-    known: Map<RemoteState<*>, Any?>,
-    private val send: (path: RemotePath, patch: JsonElement) -> Unit,
+    private val send: RemoteUpdateSender,
 ) {
 
-    private var base: T = initial
+    private class Child(
+        val state: RemoteState<*>,
+        val node: RemoteServerNode<*>,
+    )
 
-    private var children: Map<RemoteState<*>, RemoteServerNode<*, *>> = emptyMap()
+    private class Content(
+        val json: JsonElement,
+        val children: Map<RemotePath, Child>,
+        val handlers: RemoteTree<RemoteHandler>,
+    )
 
-    private var paths: Map<RemoteState<*>, RemotePath> = emptyMap()
+    private class Encoded(
+        val content: Content,
+        val created: Map<RemotePath, JsonElement>,
+    )
 
-    private var handlers: RemoteTree<RemoteHandler> = RemoteTree.Branch(emptyMap())
+    private var content: Content
+
+    val states: Map<RemotePath, JsonElement>
 
     init {
-        reconcile(initial, known)
+        val initialValue = state.value
+        val encoded = encode(initialValue, emptyMap())
+        content = encoded.content
+        states = mapOf(RemotePath.root to encoded.content.json) + encoded.created
         scope.launch {
+            var lastValue = initialValue
             state.collect { value ->
-                if (value == base) {
+                if (value == lastValue) {
                     return@collect
                 }
-                val encoded = encodeRemoteValue(patcher.patchSerializer, patcher.diff(base, value))
-                base = value
-                send(RemotePath.root, encoded.element)
-                reconcile(value, encoded.states)
+                lastValue = value
+                update(value)
             }
         }
     }
 
     fun resolve(
         path: RemotePath,
-    ): RemoteCallable? = handlers
+    ): RemoteCallable? = content
+        .handlers
         .find(path)
         ?.let { (handler, rest) -> handler(rest) }
 
-    private fun reset(
+    private fun update(
         value: T,
-        known: Map<RemoteState<*>, Any?>,
     ) {
-        base = value
-        reconcile(value, known)
-    }
-
-    private fun cancel() {
-        scope.cancel()
-    }
-
-    private fun reconcile(
-        value: T,
-        known: Map<RemoteState<*>, Any?>,
-    ) {
-        val walk = walkTree(patcher.valueSerializer, value)
-        val newChildren = walk.states.values.associate { entry ->
-            val child = children[entry.state]
-                ?.also { child -> child.resetIfKnown(entry.state, known) }
-                ?: createChild(entry, known)
-            entry.state to child
+        val previous = content
+        val encoded = encode(value, previous.children)
+        content = encoded.content
+        val alive = encoded.content.children.values.map(Child::node).toSet()
+        previous.children.values
+            .map(Child::node)
+            .filter { it !in alive }
+            .forEach { it.scope.cancel() }
+        val patch = diffJson(previous.json, encoded.content.json)
+        if (patch.isNotEmpty() || encoded.created.isNotEmpty()) {
+            send(RemotePath.root, patch, encoded.created)
         }
-        children.forEach { (state, child) ->
-            if (state !in newChildren) {
-                child.cancel()
+    }
+
+    private fun encode(
+        value: T,
+        previous: Map<RemotePath, Child>,
+    ): Encoded {
+        val children = LinkedHashMap<RemotePath, Child>()
+        val created = LinkedHashMap<RemotePath, JsonElement>()
+        val handlers = LinkedHashMap<RemotePath, RemoteHandler>()
+        val context = object : RemoteTreeEncodeContext {
+
+            override fun encodeState(
+                path: RemotePath,
+                serializer: RemoteStateSerializer<*>,
+                state: RemoteState<*>,
+            ): JsonElement {
+                val child = previous[path]
+                    ?.takeIf { it.state === state }
+                    ?: createChild(path, serializer, state).also { child ->
+                        child.node.states.forEach { (childPath, json) -> created[path + childPath] = json }
+                    }
+                children[path] = child
+                handlers[path] = child.node::resolve
+                return JsonObject(emptyMap())
+            }
+
+            override fun encodeFunction(
+                path: RemotePath,
+                serializer: RemoteFunctionSerializer<*, *>,
+                function: RemoteFunction<*, *>,
+            ): JsonElement {
+                handlers[path] = createHandler(serializer, function)
+                return JsonObject(emptyMap())
             }
         }
-        children = newChildren
-        paths = walk.states.entries.associate { (path, entry) -> entry.state to path }
-        handlers = RemoteTree.build<RemoteHandler>(
-            walk.functions.mapValues { (_, entry) -> entry.toHandler() } +
-                    walk.states.mapValues { (_, entry) -> newChildren.getValue(entry.state).let { child -> child::resolve } },
+        val json = context.encodeTree(serializer, value)
+        return Encoded(
+            content = Content(
+                json = json,
+                children = children,
+                handlers = RemoteTree.build(handlers),
+            ),
+            created = created,
         )
     }
 
     @Suppress("UNCHECKED_CAST")
-    private fun resetIfKnown(
-        state: RemoteState<*>,
-        known: Map<RemoteState<*>, Any?>,
-    ) {
-        if (known.containsKey(state)) {
-            reset(known[state] as T, known)
-        }
-    }
-
-    @Suppress("UNCHECKED_CAST")
     private fun createChild(
-        entry: RemoteStateEntry,
-        known: Map<RemoteState<*>, Any?>,
-    ): RemoteServerNode<*, *> = createChild(
-        patcher = entry.patcher as RemoteStatePatcher<*, Any?, Any?>,
-        state = entry.state as RemoteState<Any?>,
-        known = known,
-    )
-
-    @Suppress("UNCHECKED_CAST")
-    private fun <CT, CP> createChild(
-        patcher: RemoteStatePatcher<*, CT, CP>,
-        state: RemoteState<CT>,
-        known: Map<RemoteState<*>, Any?>,
-    ): RemoteServerNode<CT, CP> = RemoteServerNode(
-        scope = scope.createChild(),
-        patcher = patcher,
-        state = state.state,
-        initial = if (known.containsKey(state)) known[state] as CT else state.state.value,
-        known = known,
-        send = { path, patch -> paths[state]?.let { statePath -> send(statePath + path, patch) } },
+        path: RemotePath,
+        serializer: RemoteStateSerializer<*>,
+        state: RemoteState<*>,
+    ): Child = Child(
+        state = state,
+        node = RemoteServerNode(
+            scope = scope.createChild(),
+            serializer = serializer.valueSerializer as KSerializer<Any?>,
+            state = state.state,
+            send = { childPath, patch, states -> send(path + childPath, patch, states) },
+        ),
     )
 }
 
 @Suppress("UNCHECKED_CAST")
-private fun RemoteFunctionEntry.toHandler(): RemoteHandler {
-    val serializer = serializer as RemoteFunctionSerializer<Any?, Any?>
-    val function = function as RemoteFunction<Any?, Any?>
+private fun createHandler(
+    serializer: RemoteFunctionSerializer<*, *>,
+    function: RemoteFunction<*, *>,
+): RemoteHandler {
+    serializer as RemoteFunctionSerializer<Any?, Any?>
+    function as RemoteFunction<Any?, Any?>
     val callable: RemoteCallable = { argument ->
         RemoteJson.encodeToJsonElement(
             serializer = serializer.resultSerializer,
