@@ -10,17 +10,16 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
-import org.hnau.commons.kotlin.coroutines.flow.state.Scoped
 import org.hnau.commons.kotlin.coroutines.flow.state.mutable.toMutableStateFlowAsInitial
 import org.hnau.remotestate.common.RemoteCall
 import org.hnau.remotestate.common.RemoteJson
@@ -33,9 +32,9 @@ fun <T> HttpClient.connectRemoteState(
     url: String,
     serializer: KSerializer<T>,
     reconnectDelay: (failedAttempts: Int) -> Duration = exponentialReconnectDelay(),
-): StateFlow<RemoteConnectionState<Scoped<T>>> {
+): StateFlow<RemoteConnectionState<T>> {
 
-    val connectionState: MutableStateFlow<RemoteConnectionState<Scoped<T>>> =
+    val connectionState: MutableStateFlow<RemoteConnectionState<T>> =
         RemoteConnectionState.Connecting.toMutableStateFlowAsInitial()
 
     scope.launch {
@@ -46,14 +45,9 @@ fun <T> HttpClient.connectRemoteState(
                 scope = this,
                 url = url,
                 serializer = serializer,
-                onRoot = { root, rootScope ->
+                onRoot = { root ->
                     failedAttempts = 0
-                    connectionState.value = RemoteConnectionState.Connected(
-                        Scoped(
-                            scope = rootScope,
-                            value = root,
-                        )
-                    )
+                    connectionState.value = RemoteConnectionState.Connected(root)
                 },
             )
             failedAttempts++
@@ -72,7 +66,7 @@ private suspend fun <T> HttpClient.runConnection(
     scope: CoroutineScope,
     url: String,
     serializer: KSerializer<T>,
-    onRoot: (root: T, scope: CoroutineScope) -> Unit,
+    onRoot: (root: T) -> Unit,
 ): Throwable {
     val socket = try {
         webSocketSession(urlString = url)
@@ -104,7 +98,7 @@ private suspend fun <T> HttpClient.runConnection(
                 }
             }
             val rootWaiter = launch {
-                onRoot(session.root.await(), connectionScope)
+                onRoot(session.root.await())
             }
             for (frame in socket.incoming) {
                 val text = (frame as? Frame.Text)?.readText() ?: continue

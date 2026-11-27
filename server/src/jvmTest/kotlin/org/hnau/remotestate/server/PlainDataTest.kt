@@ -9,7 +9,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.serialization.Serializable
 import org.hnau.remotestate.common.RemoteState
 import org.hnau.remotestate.common.toRemoteState
-import kotlin.jvm.JvmInline
 import kotlin.test.Test
 import kotlin.test.assertEquals
 

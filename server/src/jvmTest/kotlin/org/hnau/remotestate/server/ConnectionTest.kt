@@ -6,7 +6,6 @@ import io.ktor.server.application.install
 import io.ktor.server.cio.CIO
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.routing.routing
-import io.ktor.server.websocket.WebSockets as ServerWebSockets
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -27,6 +26,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
 import io.ktor.client.engine.cio.CIO as ClientCIO
+import io.ktor.server.websocket.WebSockets as ServerWebSockets
 
 class ConnectionTest {
 

@@ -5,23 +5,20 @@ package org.hnau.remotestate.client
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.job
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.SendChannel
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.JsonElement
-import kotlin.concurrent.atomics.AtomicLong
-import kotlin.concurrent.atomics.ExperimentalAtomicApi
-import kotlin.concurrent.atomics.incrementAndFetch
 import org.hnau.remotestate.common.CallId
 import org.hnau.remotestate.common.RemoteCall
 import org.hnau.remotestate.common.RemotePath
 import org.hnau.remotestate.common.RemoteServerMessage
 import org.hnau.remotestate.common.fold
+import kotlin.concurrent.atomics.AtomicLong
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.concurrent.atomics.incrementAndFetch
 
 class RemoteConnectionClosedException : Exception("Connection closed")
 
@@ -102,7 +99,6 @@ internal class RemoteClientSession<T>(
         path: RemotePath,
         argument: JsonElement,
     ): JsonElement {
-        checkCaller()
         val callId = CallId(lastCallId.incrementAndFetch())
         val deferred = CompletableDeferred<JsonElement>()
         callsMutex.withLock {
@@ -121,14 +117,6 @@ internal class RemoteClientSession<T>(
             callsMutex.withLock {
                 pendingCalls.remove(callId)
             }
-        }
-    }
-
-    private suspend fun checkCaller() {
-        val connection = scope.coroutineContext.job
-        val caller = currentCoroutineContext()[Job]
-        check(generateSequence(caller, Job::parent).any { it == connection }) {
-            "RemoteFunction must be called from RemoteConnectionState.Connected.scope or its child"
         }
     }
 }
