@@ -14,7 +14,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.KSerializer
-import org.hnau.remotestate.client.RemoteConnectionState
+import org.hnau.remotestate.client.ConnectionState
 import org.hnau.remotestate.client.connectRemoteState
 import kotlin.time.Duration.Companion.seconds
 import io.ktor.client.engine.cio.CIO as ClientCIO
@@ -42,7 +42,7 @@ fun <T> withRemoteState(
                     url = "ws://localhost:$port/remote",
                     serializer = serializer,
                 )
-                .filterIsInstance<RemoteConnectionState.Connected<T>>()
+                .filterIsInstance<ConnectionState.Connected<T>>()
                 .first()
             connected.scope.async { block(connected.root) }.await()
         }

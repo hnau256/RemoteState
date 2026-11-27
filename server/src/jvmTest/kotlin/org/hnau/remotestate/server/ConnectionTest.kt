@@ -16,7 +16,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.Serializable
-import org.hnau.remotestate.client.RemoteConnectionState
+import org.hnau.remotestate.client.ConnectionState
 import org.hnau.remotestate.client.connectRemoteState
 import org.hnau.remotestate.common.RemoteFunction
 import org.hnau.remotestate.common.invoke
@@ -63,8 +63,8 @@ class ConnectionTest {
                     url = "ws://localhost:$port/remote",
                     serializer = Root.serializer(),
                 )
-                assertEquals(RemoteConnectionState.Connecting, state.value)
-                val connected = state.filterIsInstance<RemoteConnectionState.Connected<Root>>().first()
+                assertEquals(ConnectionState.Connecting, state.value)
+                val connected = state.filterIsInstance<ConnectionState.Connected<Root>>().first()
                 val root = connected.root
 
                 assertFailsWith<IllegalStateException> { root.ping() }
@@ -73,7 +73,7 @@ class ConnectionTest {
                 val hanging = connected.scope.async { root.hang() }
                 hangStarted.await()
                 server.stop(gracePeriodMillis = 0, timeoutMillis = 1000)
-                state.first { it is RemoteConnectionState.Disconnected }
+                state.first { it is ConnectionState.Disconnected }
                 hanging.join()
                 assertTrue(hanging.isCancelled)
             }

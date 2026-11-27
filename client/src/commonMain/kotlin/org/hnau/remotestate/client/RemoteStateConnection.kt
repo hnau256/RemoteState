@@ -32,27 +32,27 @@ fun <T> HttpClient.connectRemoteState(
     url: String,
     serializer: KSerializer<T>,
     reconnectDelay: (failedAttempts: Int) -> Duration = exponentialReconnectDelay(),
-): StateFlow<RemoteConnectionState<T>> {
+): StateFlow<ConnectionState<T>> {
 
-    val connectionState: MutableStateFlow<RemoteConnectionState<T>> =
-        RemoteConnectionState.Connecting.toMutableStateFlowAsInitial()
+    val connectionState: MutableStateFlow<ConnectionState<T>> =
+        ConnectionState.Connecting.toMutableStateFlowAsInitial()
 
     scope.launch {
         var failedAttempts = 0
         while (true) {
-            connectionState.value = RemoteConnectionState.Connecting
+            connectionState.value = ConnectionState.Connecting
             val cause = runConnection(
                 scope = this,
                 url = url,
                 serializer = serializer,
                 onRoot = { root ->
                     failedAttempts = 0
-                    connectionState.value = RemoteConnectionState.Connected(root)
+                    connectionState.value = ConnectionState.Connected(root)
                 },
             )
             failedAttempts++
             val delay = reconnectDelay(failedAttempts)
-            connectionState.value = RemoteConnectionState.Disconnected(
+            connectionState.value = ConnectionState.Disconnected(
                 cause = cause,
                 nextAttemptAt = Clock.System.now() + delay,
             )

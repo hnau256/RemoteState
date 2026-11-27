@@ -127,7 +127,7 @@ val connection: StateFlow<RemoteConnectionState<RootState>> = client.connectRemo
 )
 ```
 
-`RemoteConnectionState` is one of:
+`ConnectionState` is one of:
 
 - `Connecting`;
 - `Connected(root, scope)`, which holds the mirrored root state and the scope of this connection;
