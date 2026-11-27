@@ -52,8 +52,8 @@ data class RootState(
 - `RemoteState<T>` wraps a `StateFlow<T>`. Every time the value changes, the whole new value is sent to the client.
 - `RemoteMap<K, V>` wraps a `StateFlow<Map<K, V>>` and is compared with its previous value by key. Only new
   and changed entries are sent, each as a whole, and removed entries are sent as their keys. Entries are
-  addressed by key and ordered by key on the client, so keys must be comparable primitives. Insert between
-  two entries with a key between their keys, for example a `Double`.
+  addressed by key, so keys must be primitives. Like `Map` itself, `RemoteMap` does not guarantee any order
+  of entries on the client: sort them on the client if order matters.
 - `RemoteFunction<A, R>` is a `suspend (A) -> R`. Use `Pair`/`Triple` for several arguments and `Unit` for none.
   `RemoteFunction<Unit, R>` can be called without arguments: `state.logout()`.
 - Any other field is regular serializable data.

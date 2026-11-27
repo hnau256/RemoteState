@@ -10,15 +10,15 @@ import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 
 @Serializable(with = RemoteMapSerializer::class)
-class RemoteMap<K : Comparable<K>, out V>(
+class RemoteMap<K, out V>(
     val state: StateFlow<Map<K, V>>,
 )
 
-fun <K : Comparable<K>, V> StateFlow<Map<K, V>>.toRemoteMap(): RemoteMap<K, V> = RemoteMap(
+fun <K, V> StateFlow<Map<K, V>>.toRemoteMap(): RemoteMap<K, V> = RemoteMap(
     state = this,
 )
 
-class RemoteMapSerializer<K : Comparable<K>, V>(
+class RemoteMapSerializer<K, V>(
     val keySerializer: KSerializer<K>,
     val valueSerializer: KSerializer<V>,
 ) : KSerializer<RemoteMap<K, V>> {

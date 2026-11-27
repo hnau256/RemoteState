@@ -58,7 +58,6 @@ internal fun <T> receiveRemoteState(
     call = call,
 ).mapState(scope) { entries -> entries.getValue(Unit) }
 
-@Suppress("UNCHECKED_CAST")
 internal fun <K, V> receiveRemoteMap(
     scope: CoroutineScope,
     keySerializer: KSerializer<K>,
@@ -79,11 +78,7 @@ internal fun <K, V> receiveRemoteMap(
         split = { path -> path.split()?.let { (head, tail) -> decodeKey(head.value) to tail } },
         entryPath = { key -> RemotePath.root / encodeKey(key) },
         call = call,
-    ).mapState(scope) { entries ->
-        entries.entries
-            .sortedWith { first, second -> (first.key as Comparable<Any?>).compareTo(second.key) }
-            .associate { (key, value) -> key to value }
-    }
+    )
 }
 
 private fun <K, V> receiveEntries(
@@ -174,7 +169,7 @@ private fun <T> decodeContent(
                 updates = updates,
                 call = childCall(path),
             )
-            return RemoteMap(state as StateFlow<Map<String, Any?>>)
+            return RemoteMap(state)
         }
 
         override fun <A, R> decodeFunction(

@@ -71,7 +71,7 @@ class RemoteMapTest {
 
         root.put(1.5 to "b")
         val inserted = root.items.state.first { it.size == 3 }
-        assertEquals(listOf("a", "b", "c"), inserted.values.map(Item::title))
+        assertEquals(setOf("a", "b", "c"), inserted.values.map(Item::title).toSet())
         assertSame(a, inserted.getValue(1.0))
         assertSame(initial.getValue(2.0), inserted.getValue(2.0))
 
