@@ -9,14 +9,14 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import org.hnau.commons.kotlin.coroutines.flow.state.OnceCache
 import org.hnau.commons.kotlin.coroutines.flow.state.mapWithScope
-import org.hnau.remotestate.RemoteFunction
-import org.hnau.remotestate.RemoteFunctionSerializer
-import org.hnau.remotestate.RemoteJson
-import org.hnau.remotestate.RemotePath
-import org.hnau.remotestate.RemoteState
-import org.hnau.remotestate.RemoteStateSerializer
-import org.hnau.remotestate.RemoteTree
-import org.hnau.remotestate.find
+import org.hnau.remotestate.common.RemoteFunction
+import org.hnau.remotestate.common.RemoteFunctionSerializer
+import org.hnau.remotestate.common.RemoteJson
+import org.hnau.remotestate.common.RemotePath
+import org.hnau.remotestate.common.RemoteState
+import org.hnau.remotestate.common.RemoteStateSerializer
+import org.hnau.remotestate.common.RemoteTree
+import org.hnau.remotestate.common.find
 
 internal typealias RemoteCallable = suspend (argument: JsonElement) -> JsonElement
 

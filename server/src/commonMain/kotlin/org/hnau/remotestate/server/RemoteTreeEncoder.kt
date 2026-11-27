@@ -14,13 +14,13 @@ import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.modules.SerializersModule
-import org.hnau.remotestate.RemoteFunction
-import org.hnau.remotestate.RemoteFunctionSerializer
-import org.hnau.remotestate.RemoteJson
-import org.hnau.remotestate.RemotePath
-import org.hnau.remotestate.RemotePathSegment
-import org.hnau.remotestate.RemoteState
-import org.hnau.remotestate.RemoteStateSerializer
+import org.hnau.remotestate.common.RemoteFunction
+import org.hnau.remotestate.common.RemoteFunctionSerializer
+import org.hnau.remotestate.common.RemoteJson
+import org.hnau.remotestate.common.RemotePath
+import org.hnau.remotestate.common.RemotePathSegment
+import org.hnau.remotestate.common.RemoteState
+import org.hnau.remotestate.common.RemoteStateSerializer
 
 internal interface RemoteTreeEncodeContext {
 

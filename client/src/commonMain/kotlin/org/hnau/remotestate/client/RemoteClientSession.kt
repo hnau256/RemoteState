@@ -13,12 +13,12 @@ import kotlinx.serialization.json.JsonElement
 import kotlin.concurrent.atomics.AtomicLong
 import kotlin.concurrent.atomics.ExperimentalAtomicApi
 import kotlin.concurrent.atomics.incrementAndFetch
-import org.hnau.remotestate.CallError
-import org.hnau.remotestate.CallId
-import org.hnau.remotestate.RemoteCall
-import org.hnau.remotestate.RemotePath
-import org.hnau.remotestate.RemoteServerMessage
-import org.hnau.remotestate.fold
+import org.hnau.remotestate.common.CallError
+import org.hnau.remotestate.common.CallId
+import org.hnau.remotestate.common.RemoteCall
+import org.hnau.remotestate.common.RemotePath
+import org.hnau.remotestate.common.RemoteServerMessage
+import org.hnau.remotestate.common.fold
 
 class RemoteCallException(
     val error: CallError,

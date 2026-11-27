@@ -14,14 +14,14 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.JsonElement
 import org.hnau.commons.kotlin.coroutines.createChild
-import org.hnau.remotestate.RemoteFunction
-import org.hnau.remotestate.RemoteFunctionSerializer
-import org.hnau.remotestate.RemoteJson
-import org.hnau.remotestate.RemotePath
-import org.hnau.remotestate.RemoteState
-import org.hnau.remotestate.RemoteStateSerializer
-import org.hnau.remotestate.RemoteTree
-import org.hnau.remotestate.find
+import org.hnau.remotestate.common.RemoteFunction
+import org.hnau.remotestate.common.RemoteFunctionSerializer
+import org.hnau.remotestate.common.RemoteJson
+import org.hnau.remotestate.common.RemotePath
+import org.hnau.remotestate.common.RemoteState
+import org.hnau.remotestate.common.RemoteStateSerializer
+import org.hnau.remotestate.common.RemoteTree
+import org.hnau.remotestate.common.find
 
 internal typealias RemoteCaller = suspend (path: RemotePath, argument: JsonElement) -> JsonElement
 

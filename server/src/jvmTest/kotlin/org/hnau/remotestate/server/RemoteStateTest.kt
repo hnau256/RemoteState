@@ -20,7 +20,7 @@ import org.hnau.remotestate.client.RemoteCallException
 import org.hnau.remotestate.client.RemoteConnectionClosedException
 import org.hnau.remotestate.client.RemoteConnectionState
 import org.hnau.remotestate.client.connectRemoteState
-import org.hnau.remotestate.invoke
+import org.hnau.remotestate.common.invoke
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith

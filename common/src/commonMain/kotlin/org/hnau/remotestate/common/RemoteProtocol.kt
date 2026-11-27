@@ -1,4 +1,4 @@
-package org.hnau.remotestate
+package org.hnau.remotestate.common
 
 import arrow.core.Either
 import arrow.core.serialization.EitherSerializer

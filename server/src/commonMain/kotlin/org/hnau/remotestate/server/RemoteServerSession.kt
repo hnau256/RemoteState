@@ -7,10 +7,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.JsonElement
-import org.hnau.remotestate.CallError
-import org.hnau.remotestate.RemoteCall
-import org.hnau.remotestate.RemotePath
-import org.hnau.remotestate.RemoteServerMessage
+import org.hnau.remotestate.common.CallError
+import org.hnau.remotestate.common.RemoteCall
+import org.hnau.remotestate.common.RemotePath
+import org.hnau.remotestate.common.RemoteServerMessage
 
 internal class RemoteServerSession private constructor(
     private val scope: CoroutineScope,
