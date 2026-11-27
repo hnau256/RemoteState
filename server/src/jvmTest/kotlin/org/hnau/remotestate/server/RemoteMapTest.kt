@@ -1,11 +1,13 @@
 package org.hnau.remotestate.server
 
-import kotlinx.coroutines.CoroutineScope
+import arrow.core.left
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.serialization.Serializable
-import org.hnau.remotestate.client.RemoteCallException
+import org.hnau.remotestate.client.ClientCallError
+import org.hnau.remotestate.client.invokeCatching
+import org.hnau.remotestate.common.CallError
 import org.hnau.remotestate.common.RemoteFunction
 import org.hnau.remotestate.common.RemoteMap
 import org.hnau.remotestate.common.RemoteState
@@ -14,7 +16,6 @@ import org.hnau.remotestate.common.toRemoteMap
 import org.hnau.remotestate.common.toRemoteState
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 import kotlin.test.assertSame
 
 class RemoteMapTest {
@@ -86,6 +87,6 @@ class RemoteMapTest {
         assertSame(a, renamed.getValue(1.0))
 
         val b = inserted.getValue(1.5)
-        assertFailsWith<RemoteCallException> { b.increment() }
+        assertEquals(ClientCallError.Server(CallError.Outdated).left(), b.increment.invokeCatching())
     }
 }

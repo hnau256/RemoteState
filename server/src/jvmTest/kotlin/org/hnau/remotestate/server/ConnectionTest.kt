@@ -1,5 +1,6 @@
 package org.hnau.remotestate.server
 
+import arrow.core.left
 import io.ktor.client.HttpClient
 import io.ktor.client.plugins.websocket.WebSockets
 import io.ktor.server.application.install
@@ -14,14 +15,14 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.serialization.Serializable
-import org.hnau.remotestate.client.RemoteConnectionClosedException
+import org.hnau.remotestate.client.ClientCallError
 import org.hnau.remotestate.client.RemoteConnectionState
 import org.hnau.remotestate.client.connectRemoteState
+import org.hnau.remotestate.client.invokeCatching
 import org.hnau.remotestate.common.RemoteFunction
 import org.hnau.remotestate.common.invoke
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 import kotlin.time.Duration.Companion.seconds
 import io.ktor.client.engine.cio.CIO as ClientCIO
 
@@ -56,7 +57,7 @@ class ConnectionTest {
 
                 server.stop(gracePeriodMillis = 0, timeoutMillis = 1000)
                 state.first { it is RemoteConnectionState.Disconnected }
-                assertFailsWith<RemoteConnectionClosedException> { root.ping() }
+                assertEquals(ClientCallError.Disconnected.left(), root.ping.invokeCatching())
             }
         } finally {
             connection.cancel()

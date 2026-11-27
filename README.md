@@ -149,12 +149,21 @@ logged.addTask("Buy milk")
 logged.tasks.state.collect { tasks -> render(tasks.values) }
 ```
 
-Calls throw:
+Calls throw `RemoteCallException` with a `ClientCallError`:
 
-- `RemoteCallException` with `CallError.Outdated` if there is no function at its path anymore
-  (see below);
-- `RemoteCallException` with `CallError.Internal` if it threw on the server;
-- the disconnection cause if the connection is lost.
+- `Server(CallError.Outdated)` if there is no function at its path anymore (see below);
+- `Server(CallError.Internal)` if it threw on the server;
+- `Disconnected` if the connection was lost before the result arrived. The call may or may not have been
+  executed.
+
+`invokeCatching` returns the same errors as `Either<ClientCallError, R>` instead of throwing:
+
+```kotlin
+logged.addTask.invokeCatching("Buy milk").fold(
+    ifLeft = { error -> showError(error) },
+    ifRight = { },
+)
+```
 
 ## How it works
 
