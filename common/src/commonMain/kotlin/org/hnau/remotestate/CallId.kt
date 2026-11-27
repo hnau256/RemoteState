@@ -1,4 +1,4 @@
-package org.hnau.remotestate.common
+package org.hnau.remotestate
 
 import kotlinx.serialization.Serializable
 import kotlin.jvm.JvmInline

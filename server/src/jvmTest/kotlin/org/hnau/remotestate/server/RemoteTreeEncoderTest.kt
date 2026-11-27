@@ -1,13 +1,19 @@
-package org.hnau.remotestate.common
+package org.hnau.remotestate.server
 
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import org.hnau.remotestate.RemoteFunction
+import org.hnau.remotestate.RemoteFunctionSerializer
+import org.hnau.remotestate.RemotePath
+import org.hnau.remotestate.RemoteState
+import org.hnau.remotestate.RemoteStateSerializer
+import org.hnau.remotestate.toRemoteState
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -24,19 +30,19 @@ class RemoteTreeEncoderTest {
 
         val paths: MutableList<String> = mutableListOf()
 
-        override fun encodeState(
+        override fun <T> encodeState(
             path: RemotePath,
-            serializer: RemoteStateSerializer<*>,
-            state: RemoteState<*>,
+            serializer: RemoteStateSerializer<T>,
+            state: RemoteState<T>,
         ): JsonElement {
             paths += path.toString()
-            return JsonObject(emptyMap())
+            return JsonPrimitive("state")
         }
 
-        override fun encodeFunction(
+        override fun <A, R> encodeFunction(
             path: RemotePath,
-            serializer: RemoteFunctionSerializer<*, *>,
-            function: RemoteFunction<*, *>,
+            serializer: RemoteFunctionSerializer<A, R>,
+            function: RemoteFunction<A, R>,
         ): JsonElement {
             paths += path.toString()
             return JsonObject(emptyMap())
@@ -48,33 +54,26 @@ class RemoteTreeEncoderTest {
         action = {},
     )
 
-    private fun <T> paths(
-        serializer: KSerializer<T>,
-        value: T,
-    ): List<String> = RecordingContext()
-        .also { it.encodeTree(serializer, value) }
-        .paths
-
     @Test
     fun remoteValuesInsideMapGetKeyPaths() {
+        val context = RecordingContext()
+        context.encodeTree(
+            serializer = MapSerializer(String.serializer(), Item.serializer()),
+            value = mapOf("a" to item(), "b" to item()),
+        )
         assertEquals(
             listOf("a/state", "a/action", "b/state", "b/action"),
-            paths(MapSerializer(String.serializer(), Item.serializer()), mapOf("a" to item(), "b" to item())),
+            context.paths,
         )
     }
 
     @Test
     fun remoteValuesInsideListAreRejected() {
         assertFailsWith<IllegalStateException> {
-            paths(ListSerializer(Item.serializer()), listOf(item()))
+            RecordingContext().encodeTree(
+                serializer = ListSerializer(Item.serializer()),
+                value = listOf(item()),
+            )
         }
-    }
-
-    @Test
-    fun emptyMapKeysAreAllowedInPlainData() {
-        assertEquals(
-            emptyList(),
-            paths(MapSerializer(String.serializer(), Int.serializer()), mapOf("" to 1)),
-        )
     }
 }

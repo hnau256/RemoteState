@@ -20,7 +20,7 @@ import org.hnau.remotestate.client.RemoteCallException
 import org.hnau.remotestate.client.RemoteConnectionClosedException
 import org.hnau.remotestate.client.RemoteConnectionState
 import org.hnau.remotestate.client.connectRemoteState
-import org.hnau.remotestate.common.invoke
+import org.hnau.remotestate.invoke
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -84,11 +84,10 @@ class RemoteStateTest {
                     val tasks = logged.tasks.state.first { it.size == 2 }
                     assertEquals(listOf("first", "second"), tasks.values.map(TaskState::title))
 
-                    val first = tasks.getValue("first")
-                    first.remove()
+                    tasks.getValue("first").remove()
                     val remaining = logged.tasks.state.first { it.size == 1 }.values.single()
                     assertEquals("second", remaining.title)
-                    assertFailsWith<RemoteCallException> { first.remove() }
+                    assertFailsWith<RemoteCallException> { tasks.getValue("first").remove() }
                     remaining.remove()
                     logged.tasks.state.first { it.isEmpty() }
 

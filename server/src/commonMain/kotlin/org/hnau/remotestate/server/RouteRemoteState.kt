@@ -14,9 +14,9 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
-import org.hnau.remotestate.common.RemoteCall
-import org.hnau.remotestate.common.RemoteJson
-import org.hnau.remotestate.common.RemoteServerMessage
+import org.hnau.remotestate.RemoteCall
+import org.hnau.remotestate.RemoteJson
+import org.hnau.remotestate.RemoteServerMessage
 
 @OptIn(ExperimentalCoroutinesApi::class)
 fun <T> Route.remoteState(
@@ -55,7 +55,7 @@ fun <T> Route.remoteState(
             }
             for (frame in incoming) {
                 val text = (frame as? Frame.Text)?.readText() ?: continue
-                val remoteCall = runCatching {
+                val remoteCall = catchingResult {
                     RemoteJson.decodeFromString(
                         deserializer = RemoteCall.serializer(),
                         string = text,

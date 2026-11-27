@@ -6,22 +6,23 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.KSerializer
-import org.hnau.remotestate.common.CallError
-import org.hnau.remotestate.common.RemoteCall
-import org.hnau.remotestate.common.RemotePath
-import org.hnau.remotestate.common.RemoteServerMessage
+import kotlinx.serialization.json.JsonElement
+import org.hnau.remotestate.CallError
+import org.hnau.remotestate.RemoteCall
+import org.hnau.remotestate.RemotePath
+import org.hnau.remotestate.RemoteServerMessage
 
 internal class RemoteServerSession private constructor(
     private val scope: CoroutineScope,
     private val sendMessage: (RemoteServerMessage) -> Unit,
     private val onError: (Throwable) -> Unit,
-    private val root: RemoteServerNode<*>,
+    private val root: RemoteHandler,
 ) {
 
     fun handle(
         call: RemoteCall,
     ) {
-        val function = root.resolve(call.path) ?: run {
+        val function = root(call.path) ?: run {
             sendMessage(
                 RemoteServerMessage.CallResult(
                     callId = call.callId,
@@ -58,20 +59,21 @@ internal class RemoteServerSession private constructor(
             serializer: KSerializer<T>,
             root: T,
         ): RemoteServerSession {
-            val node = RemoteServerNode(
+            val sendUpdate = { path: RemotePath, value: JsonElement ->
+                sendMessage(RemoteServerMessage.Update(path = path, value = value))
+            }
+            val served = serveRemoteState(
                 scope = scope,
                 serializer = serializer,
                 state = MutableStateFlow(root),
-                send = { path, patch, states ->
-                    sendMessage(RemoteServerMessage.Update(path = path, patch = patch, states = states))
-                },
+                sendUpdate = sendUpdate,
             )
-            sendMessage(RemoteServerMessage.Update(path = RemotePath.root, patch = emptyList(), states = node.states))
+            sendUpdate(RemotePath.root, served.initial)
             return RemoteServerSession(
                 scope = scope,
                 sendMessage = sendMessage,
                 onError = onError,
-                root = node,
+                root = served.handler,
             )
         }
     }

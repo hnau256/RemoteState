@@ -14,7 +14,7 @@ Every remote value is addressed by its path in the tree, for example `loginState
 
 | Module   | Contents                                                                                                                |
 |----------|-------------------------------------------------------------------------------------------------------------------------|
-| `common` | `RemoteState`, `RemoteFunction`, wire protocol. Depend on it from the module with your state classes.             |
+| `common` | `RemoteState`, `RemoteFunction`, `RemotePath`, wire protocol. Depend on it from the module with your state classes.   |
 | `server` | `Route.remoteState(...)`: a Ktor WebSocket route that serves the state tree.                                          |
 | `client` | `HttpClient.connectRemoteState(...)`: connects, reconnects and exposes the mirrored tree as a `StateFlow`.              |
 
@@ -49,13 +49,13 @@ data class RootState(
 )
 ```
 
-- `RemoteState<T>` wraps a `StateFlow<T>`. Only what changed in its value is sent to the client.
+- `RemoteState<T>` wraps a `StateFlow<T>`. Every time the value changes, the whole new value is sent to the client.
 - `RemoteFunction<A, R>` is a `suspend (A) -> R`. Use `Pair`/`Triple` for several arguments and `Unit` for none.
   `RemoteFunction<Unit, R>` can be called without arguments: `state.logout()`.
 - Any other field is regular serializable data.
-- `RemoteState` and `RemoteFunction` can be placed in objects, maps and sealed classes, but not inside a
-  `List`: list indices are not stable addresses. For a collection of interactive items use a `Map` with
-  stable keys: items are addressed by key, and the order of the map is kept.
+- `RemoteState` and `RemoteFunction` cannot be placed inside a `List`, because list indices are not stable
+  addresses. Use a `Map` with stable keys instead: the key becomes a path segment. Map keys must be
+  non-empty primitives. Lists of plain data are fine.
 
 ## Server
 
@@ -150,29 +150,23 @@ Calls throw:
 
 ## How it works
 
-Every `RemoteState` is a node. A node encodes its value to JSON. Functions become `{}` and are registered by
-their path inside the value. Nested `RemoteState`s become `{}` too and get their own nodes, so the JSON of a
-node holds only its own data.
+The server encodes the state tree into JSON with its own encoder that tracks the path of every value:
 
-When the value changes, the node encodes it again, compares the new JSON with the previous one and sends
-only the difference:
+- A `RemoteState` is written as its current value. It becomes a separate node that encodes its own value,
+  watches its `StateFlow` and sends an `update` with its path when the value changes.
+- A `RemoteFunction` is written as `{}`. The node that contains it handles calls to its path.
+- Each node knows only paths relative to itself and keeps a tree of what it contains: functions and nested
+  states, keyed by path segments. A call is routed segment by segment down to the node that owns it.
+- When the value of a node changes, everything inside it is dropped and built again from the new value.
+  Nested states that did not change are not affected by updates of their siblings or their children.
 
-- unchanged parts are skipped;
-- object members are added, removed and changed by key, and moved items are placed next to their
-  neighbours (only the items that left their relative order are moved);
-- a string that got longer at the end is sent as its suffix, so streamed text costs only the new part;
-- an array that got longer at the end is sent as its new items.
-
-A nested state with the same instance at the same path keeps its node. A new instance gets a new node,
-and its JSON is sent together with the update of its parent.
-
-The client mirrors this. A node applies a patch to its JSON, sharing all untouched parts with the previous
-JSON, and decodes the value again. Every part whose JSON is the same instance as before is taken from the
-previous value, so unchanged objects stay the same instances and the UI does not redraw them.
+The client mirrors this. Every `RemoteState` becomes a node with its own `StateFlow` and a queue of updates.
+An `update` is routed segment by segment to the node at its path, and that node decodes the new value,
+rebuilding its nested states. Every `RemoteFunction` becomes a lambda that sends a `call` with its path.
 
 A call goes to whatever function is at its path at the moment the server receives it. If there is none,
-the call fails with `CallError.Outdated`. For example, removing a task twice fails the second time, and a
-call on a logged state after logout fails because `loginState/right/...` no longer exists.
+the call fails with `CallError.Outdated`. For example, removing a task twice fails the second time,
+and a call on a logged state after logout fails because `loginState/right/...` no longer exists.
 
 ### Protocol
 
@@ -185,39 +179,27 @@ Client to server, the only message is a call:
 {"callId": 3, "path": "loginState/right/addTask", "argument": "Buy milk"}
 ```
 
-Server to client, an update of the state at `path` and results of calls:
+Server to client:
 
 ```json
-{"type": "update", "path": "", "patch": [], "states": {"": {"loginState": {}}, "loginState": {"left": {"login": {}}}}}
-{"type": "update", "path": "loginState", "patch": [{"type": "remove", "path": "left"}, {"type": "set", "path": "right", "value": {"tasks": {}, "addTask": {}, "logout": {}}}], "states": {"right/tasks": {}}}
-{"type": "update", "path": "loginState/right/tasks", "patch": [{"type": "set", "path": "Buy milk", "value": {"title": "Buy milk", "remove": {}}}]}
-{"type": "update", "path": "chat/messages/42/text", "patch": [{"type": "append", "path": "", "text": " world"}]}
+{"type": "update", "path": "", "value": {"loginState": {"left": {"login": {}}}}}
+{"type": "update", "path": "loginState/right/tasks", "value": {"Buy milk": {"title": "Buy milk", "remove": {}}}}
 {"type": "call_result", "callId": 3, "result": {"right": {}}}
 {"type": "call_result", "callId": 4, "result": {"left": "outdated"}}
 ```
 
-`patch` is a list of operations on the JSON of the state: `set`, `remove`, `append` (to a string), `push`
-(to an array) and `place` (move an object member after another one or to the start). `states` holds the JSON
-of nested states created by this update, by their paths relative to `path`. The first message creates
-the root.
-
-Sealed classes are encoded as `{"type": ..., "value": ...}`, so `value` appears in paths through them.
+The server sends the root as an `update` with the empty path right after the connection is opened. Sealed classes are encoded as
+`{"type": ..., "value": ...}`, so `value` appears in paths through them.
 
 A call result and the update it causes are not ordered relative to each other. Wait for the expected
 state rather than reading it right after a call.
 
 ## Notes and limitations
 
-- **Every change re-encodes and compares the value of its state.** The network gets only the difference,
-  but the work is linear in the size of the value. Split large states into nested `RemoteState`s, then only
-  the changed one is processed.
-- **Keep unchanged items as the same objects** on the server (for example with `mapListReusable`), so
-  nested states inside them keep their nodes.
+- **Updates send the whole value of a state.** Split large states into nested `RemoteState`s.
+- **Map keys must be non-empty**, even in plain data, because every key is a potential path segment.
 - **Calls go to the current address.** If a key is reused, a call made from an old value reaches the new
   element with the same key.
-- **A change of map order alone is not sent.** Maps with the same entries are equal, so `StateFlow` does not
-  emit a map that only changed its order. The new order is sent with the next change of the map.
-- **Object keys must not be empty**, because every key is a path segment.
 - **Function arguments and results** are plain data encoded with regular JSON. They cannot contain
   `RemoteState` or `RemoteFunction`.
 - **Every connection gets its own model tree.** `createRoot` is called for each connection.

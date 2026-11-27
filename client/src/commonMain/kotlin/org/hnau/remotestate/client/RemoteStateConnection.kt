@@ -20,13 +20,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
-import org.hnau.remotestate.common.RemoteCall
-import org.hnau.remotestate.common.RemoteJson
-import org.hnau.remotestate.common.RemoteServerMessage
+import org.hnau.remotestate.RemoteCall
+import org.hnau.remotestate.RemoteJson
+import org.hnau.remotestate.RemoteServerMessage
 import kotlin.time.Clock
 import kotlin.time.Duration
-
-class RemoteConnectionClosedException : Exception("Connection closed")
 
 fun <T> HttpClient.connectRemoteState(
     scope: CoroutineScope,

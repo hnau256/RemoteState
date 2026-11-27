@@ -2,25 +2,29 @@
 
 package org.hnau.remotestate.client
 
-import kotlin.concurrent.atomics.AtomicLong
-import kotlin.concurrent.atomics.ExperimentalAtomicApi
-import kotlin.concurrent.atomics.incrementAndFetch
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.channels.SendChannel
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.json.JsonElement
-import org.hnau.remotestate.common.CallError
-import org.hnau.remotestate.common.CallId
-import org.hnau.remotestate.common.RemoteCall
-import org.hnau.remotestate.common.RemotePath
-import org.hnau.remotestate.common.RemoteServerMessage
-import org.hnau.remotestate.common.fold
+import kotlin.concurrent.atomics.AtomicLong
+import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import kotlin.concurrent.atomics.incrementAndFetch
+import org.hnau.remotestate.CallError
+import org.hnau.remotestate.CallId
+import org.hnau.remotestate.RemoteCall
+import org.hnau.remotestate.RemotePath
+import org.hnau.remotestate.RemoteServerMessage
+import org.hnau.remotestate.fold
 
 class RemoteCallException(
     val error: CallError,
 ) : Exception("Remote call failed: $error")
+
+class RemoteConnectionClosedException : Exception("Connection closed")
 
 internal class RemoteClientSession<T>(
     private val scope: CoroutineScope,
@@ -38,16 +42,19 @@ internal class RemoteClientSession<T>(
 
     val root: CompletableDeferred<T> = CompletableDeferred()
 
-    private var rootNode: RemoteClientNode<T>? = null
+    private var rootUpdates: SendChannel<RemoteUpdate>? = null
 
     suspend fun handle(
         message: RemoteServerMessage,
     ) {
         message.fold(
-            ifUpdate = { path, patch, states ->
-                rootNode
-                    ?.update(path, patch, states)
-                    ?: createRoot(path, states)
+            ifUpdate = { path, value ->
+                rootUpdates
+                    ?.trySend(path to value)
+                    ?: run {
+                        check(path == RemotePath.root) { "Expected root, got update for $path" }
+                        createRoot(value)
+                    }
             },
             ifCallResult = { callId, result ->
                 completeCall(callId) {
@@ -61,19 +68,18 @@ internal class RemoteClientSession<T>(
     }
 
     private fun createRoot(
-        path: RemotePath,
-        states: Map<RemotePath, JsonElement>,
+        value: JsonElement,
     ) {
-        check(path == RemotePath.root) { "Expected root, got update for $path" }
-        val node = RemoteClientNode(
+        val updates = Channel<RemoteUpdate>(Channel.UNLIMITED)
+        rootUpdates = updates
+        val state = receiveRemoteState(
             scope = scope,
             serializer = rootSerializer,
-            initial = states[RemotePath.root] ?: error("Root state was not received"),
-            states = states - RemotePath.root,
+            initial = value,
+            updates = updates,
             call = ::call,
         )
-        rootNode = node
-        root.complete(node.state.value)
+        root.complete(state.value)
     }
 
     suspend fun close(

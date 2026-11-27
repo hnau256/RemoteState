@@ -1,4 +1,4 @@
-package org.hnau.remotestate.common
+package org.hnau.remotestate
 
 import arrow.core.Either
 import arrow.core.serialization.EitherSerializer
@@ -26,8 +26,7 @@ sealed interface RemoteServerMessage {
     @SerialName("update")
     data class Update(
         val path: RemotePath,
-        val patch: List<JsonOperation>,
-        val states: Map<RemotePath, JsonElement> = emptyMap(),
+        val value: JsonElement,
     ) : RemoteServerMessage
 
     @Serializable

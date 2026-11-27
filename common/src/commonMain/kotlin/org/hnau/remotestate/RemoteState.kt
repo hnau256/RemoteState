@@ -1,4 +1,4 @@
-package org.hnau.remotestate.common
+package org.hnau.remotestate
 
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.ExperimentalSerializationApi

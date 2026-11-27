@@ -10,7 +10,7 @@ import org.hnau.commons.kotlin.coroutines.flow.state.mapState
 import org.hnau.commons.kotlin.coroutines.flow.state.mapWithScope
 import org.hnau.commons.kotlin.coroutines.flow.state.mutable.toMutableStateFlowAsInitial
 import org.hnau.commons.kotlin.foldBoolean
-import org.hnau.remotestate.common.toRemoteState
+import org.hnau.remotestate.toRemoteState
 
 class TaskModel(
     title: String,
