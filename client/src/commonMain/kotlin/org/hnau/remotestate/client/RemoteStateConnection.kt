@@ -20,6 +20,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
+import org.hnau.commons.kotlin.coroutines.flow.state.Scoped
+import org.hnau.commons.kotlin.coroutines.flow.state.mutable.toMutableStateFlowAsInitial
 import org.hnau.remotestate.common.RemoteCall
 import org.hnau.remotestate.common.RemoteJson
 import org.hnau.remotestate.common.RemoteServerMessage
@@ -31,8 +33,11 @@ fun <T> HttpClient.connectRemoteState(
     url: String,
     serializer: KSerializer<T>,
     reconnectDelay: (failedAttempts: Int) -> Duration = exponentialReconnectDelay(),
-): StateFlow<RemoteConnectionState<T>> {
-    val connectionState = MutableStateFlow<RemoteConnectionState<T>>(RemoteConnectionState.Connecting)
+): StateFlow<RemoteConnectionState<Scoped<T>>> {
+
+    val connectionState: MutableStateFlow<RemoteConnectionState<Scoped<T>>> =
+        RemoteConnectionState.Connecting.toMutableStateFlowAsInitial()
+
     scope.launch {
         var failedAttempts = 0
         while (true) {
@@ -43,7 +48,12 @@ fun <T> HttpClient.connectRemoteState(
                 serializer = serializer,
                 onRoot = { root, rootScope ->
                     failedAttempts = 0
-                    connectionState.value = RemoteConnectionState.Connected(root, rootScope)
+                    connectionState.value = RemoteConnectionState.Connected(
+                        Scoped(
+                            scope = rootScope,
+                            value = root,
+                        )
+                    )
                 },
             )
             failedAttempts++
