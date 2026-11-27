@@ -15,7 +15,7 @@ plugins {
 
 hnau {
     publish {
-        version = "1.0.0"
+        version = "1.1.0"
         gitUrl = "https://github.com/hnau256/remote_state"
     }
 }
