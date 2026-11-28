@@ -17,5 +17,10 @@ hnau {
     publish {
         version = "1.4.0"
         gitUrl = "https://github.com/hnau256/remote_state"
+        exclude = listOf(
+            ":test:common",
+            ":test:server",
+            ":test:app",
+        )
     }
 }

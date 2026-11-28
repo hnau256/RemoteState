@@ -22,6 +22,12 @@ Every remote value is addressed by its path in the tree, for example `loginState
 
 All modules are multiplatform. `utils:ui` targets Android, desktop and wasm.
 
+`test:common`, `test:server` and `test:app` are a demo application, not published. `test:app` is a desktop
+app that starts the demo server inside itself and connects to it. It shows a shared counter (`RemoteState`),
+notes (`RemoteMap`) with a domain error, slow and failing calls (`RemoteFunction`), connection screens
+and a button that stops and starts the server to see reconnects. Run it with `./gradlew :test:app:run`;
+open a second instance to see the state shared between clients.
+
 ## Defining state
 
 State classes live in shared code and are ordinary `@Serializable` classes:
