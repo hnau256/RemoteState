@@ -10,7 +10,6 @@ kotlin {
                 api(project(":client"))
                 api(project(":utils:core"))
                 api(hnau.commons.app.projector)
-                api(hnau.commons.app.model)
             }
         }
     }
