@@ -7,10 +7,10 @@ import org.hnau.remotestate.utils.ui.ConnectionStateLocalization
 data class Localization(
     val appName: String = "RemoteState test",
     val connectionState: ConnectionStateLocalization = ConnectionStateLocalization(
-        title = appName,
         connecting = "Connecting…",
         disconnected = "No connection to the server",
-        nextAttemptAt = "Next attempt at",
+        nextAttemptIn = "Next attempt in",
+        reconnectNow = "Reconnect now",
     ),
     val serverIsRunning: String = "Server is running",
     val serverIsStopped: String = "Server is stopped",

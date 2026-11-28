@@ -6,19 +6,20 @@ import io.ktor.websocket.Frame
 import io.ktor.websocket.close
 import io.ktor.websocket.readText
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.KSerializer
 import org.hnau.commons.kotlin.coroutines.flow.state.mutable.toMutableStateFlowAsInitial
 import org.hnau.remotestate.common.RemoteCall
@@ -52,11 +53,13 @@ fun <T> HttpClient.connectRemoteState(
             )
             failedAttempts++
             val delay = reconnectDelay(failedAttempts)
+            val reconnectRequest = CompletableDeferred<Unit>()
             connectionState.value = ConnectionState.Disconnected(
                 cause = cause,
                 nextAttemptAt = Clock.System.now() + delay,
+                reconnectNow = { reconnectRequest.complete(Unit) },
             )
-            delay(delay)
+            withTimeoutOrNull(delay) { reconnectRequest.await() }
         }
     }
     return connectionState.asStateFlow()

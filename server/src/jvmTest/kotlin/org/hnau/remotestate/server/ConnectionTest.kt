@@ -23,6 +23,7 @@ import org.hnau.remotestate.common.invoke
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.seconds
 import io.ktor.client.engine.cio.CIO as ClientCIO
 import io.ktor.server.websocket.WebSockets as ServerWebSockets
@@ -74,6 +75,48 @@ class ConnectionTest {
                 state.first { it is ConnectionState.Disconnected }
                 hanging.join()
                 assertTrue(hanging.isCancelled)
+            }
+        } finally {
+            connection.cancel()
+            client.close()
+            server.stop()
+        }
+    }
+
+    @Test
+    fun reconnectNowSkipsDelay(): Unit = runBlocking {
+        val createServer = { port: Int ->
+            embeddedServer(CIO, port = port) {
+                install(ServerWebSockets)
+                routing {
+                    remoteState(path = "/remote", serializer = Root.serializer()) {
+                        Root(
+                            ping = { "pong" },
+                            hang = { awaitCancellation() },
+                        )
+                    }
+                }
+            }
+        }
+        val probe = createServer(0).start()
+        val port = probe.engine.resolvedConnectors().first().port
+        probe.stop()
+        val client = HttpClient(ClientCIO) { install(WebSockets) }
+        val connection = Job(coroutineContext[Job])
+        val server = createServer(port)
+        try {
+            withTimeout(10.seconds) {
+                val state = client.connectRemoteState(
+                    scope = CoroutineScope(coroutineContext + connection),
+                    url = "ws://localhost:$port/remote",
+                    serializer = Root.serializer(),
+                    reconnectDelay = { 1.hours },
+                )
+                val disconnected = state.filterIsInstance<ConnectionState.Disconnected>().first()
+                server.start()
+                disconnected.reconnectNow()
+                val connected = state.filterIsInstance<ConnectionState.Connected<Root>>().first()
+                assertEquals("pong", connected.root.ping())
             }
         } finally {
             connection.cancel()

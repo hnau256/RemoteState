@@ -4,8 +4,8 @@ import androidx.compose.runtime.Immutable
 
 @Immutable
 data class ConnectionStateLocalization(
-    val title: String,
     val connecting: String,
     val disconnected: String,
-    val nextAttemptAt: String,
+    val nextAttemptIn: String,
+    val reconnectNow: String,
 )

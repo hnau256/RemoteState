@@ -25,7 +25,7 @@ All modules are multiplatform. `utils:ui` targets Android, desktop and wasm.
 `test:common`, `test:server` and `test:app` are a demo application, not published. `test:app` is a desktop
 app that starts the demo server inside itself and connects to it. It shows a shared counter (`RemoteState`),
 notes (`RemoteMap`) with a domain error, slow and failing calls (`RemoteFunction`), connection screens
-and a button that stops and starts the server to see reconnects. Run it with `./gradlew :test:app:run`;
+and a button that stops and starts the server to see reconnects, the countdown and `reconnectNow`. Run it with `./gradlew :test:app:run`;
 open a second instance to see the state shared between clients.
 
 ## Defining state
@@ -139,11 +139,13 @@ val connection: StateFlow<ConnectionState<RootState>> = client.connectRemoteStat
 
 - `Connecting`;
 - `Connected(root)`, which holds the mirrored root state;
-- `Disconnected(cause, nextAttemptAt)`, which holds the reason and the time of the next reconnect attempt.
+- `Disconnected(cause, nextAttemptAt, reconnectNow)`, which holds the reason, the time of the next reconnect
+  attempt and a function that starts that attempt right away.
 
 The client reconnects automatically. The delay is a function of the number of consecutive failed
 attempts and defaults to `exponentialReconnectDelay()`: 1s, doubling, capped at 30s, reset after a
-successful connection. Every successful connection produces a new root. The previous root stops updating.
+successful connection. Every successful connection produces a new root. The previous root stops updating. Calling `reconnectNow` skips the rest of the delay; a failed attempt still counts
+towards the next delay.
 
 Using the mirrored state:
 

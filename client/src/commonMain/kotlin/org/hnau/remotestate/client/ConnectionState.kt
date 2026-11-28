@@ -18,6 +18,7 @@ sealed interface ConnectionState<out T> {
     data class Disconnected(
         val cause: Throwable,
         val nextAttemptAt: Instant,
+        val reconnectNow: () -> Unit,
     ) : ConnectionState<Nothing>
 }
 
